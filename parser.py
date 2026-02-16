@@ -60,6 +60,7 @@ class Parser:
             return []
 
         transactions = []
+        import hashlib
         for _, row in df.iterrows():
             try:
                 amount_val = row[final_cols['Amount']]
@@ -71,10 +72,17 @@ class Parser:
                 else:
                     amount = float(amount_val)
                 
+                date_str = str(row[final_cols['Date']])
+                desc_str = str(row[final_cols['Description']])
+                
+                # Generate a stable ID based on transaction data
+                hash_input = f"{date_str}{desc_str}{amount}".encode('utf-8')
+                tx_id = hashlib.md5(hash_input).hexdigest()[:10]
+                
                 transactions.append({
-                    'id': str(uuid.uuid4())[:9],
-                    'date': str(row[final_cols['Date']]),
-                    'description': str(row[final_cols['Description']])[:150], # Increased slightly for Buchungstext
+                    'id': tx_id,
+                    'date': date_str,
+                    'description': desc_str[:150],
                     'amount': amount,
                     'category': None
                 })

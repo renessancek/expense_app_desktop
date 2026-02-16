@@ -25,17 +25,21 @@ class Categorizer:
             json.dump(data, f, indent=4)
 
     def suggest_category(self, description):
+        import re
         desc = description.lower()
 
-        # Check for exact or partial matches in the learned mappings
-        for keyword, category in self.mappings.items():
-            if keyword in desc:
-                return category
-
-        # Default rule-based categorization for common items if no learned mapping exists
+        # 1. First priority: Manual/Global Rules
         for rule in self.rules:
-            if any(keyword in desc for keyword in rule['keywords']):
-                return rule['category']
+            for keyword in rule['keywords']:
+                pattern = rf'\b{re.escape(keyword.lower())}\b'
+                if re.search(pattern, desc):
+                    return rule['category']
+
+        # 2. Second priority: Learned Mappings
+        for keyword, category in self.mappings.items():
+            pattern = rf'\b{re.escape(keyword.lower())}\b'
+            if re.search(pattern, desc):
+                return category
 
         return 'Sonstiges'
 
@@ -62,6 +66,17 @@ class Categorizer:
     def delete_rule(self, category):
         self.rules = [r for r in self.rules if r['category'] != category]
         self.save_rules()
+
+    def get_all_categories(self):
+        # Unique set of categories from rules and mappings
+        cats = {rule['category'] for rule in self.rules}
+        cats.update(self.mappings.values())
+        
+        # Ensure default essential categories exist
+        defaults = {"Sonstiges", "Supermarkt", "Amazon", "Versicherung", "Computerspiele", "Trading", "Haus"}
+        cats.update(defaults)
+        
+        return sorted(list(cats))
 
     def update_rule_keywords(self, category, keywords):
         for rule in self.rules:

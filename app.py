@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import plotly.express as px
 from scanner import Scanner
 from parser import Parser
 from categorizer import Categorizer
@@ -102,7 +103,7 @@ with tab1:
         st.subheader("Recent Transactions")
         
         for i, row in df.iterrows():
-            with st.expander(f"{row['date']} - {row['description'][:50]}... ({row['amount']:.2f} €)"):
+            with st.expander(f"{row['date']} - {row['description'][:50]}... ({row['amount']:.2f} €)", expanded=True):
                 col_left, col_right = st.columns([2, 1])
                 
                 with col_left:
@@ -111,7 +112,13 @@ with tab1:
                 
                 with col_right:
                     current_cat = row['category']
-                    categories = ["Sonstiges", "Supermarkt", "Amazon", "Versicherung", "Computerspiele", "Trading", "Haus", "Custom..."]
+                    
+                    # Fetch all categories and ensure specific order
+                    all_cats = categorizer.get_all_categories()
+                    if "Sonstiges" in all_cats:
+                        all_cats.remove("Sonstiges")
+                    categories = ["Sonstiges"] + all_cats + ["Custom..."]
+                    
                     index = categories.index(current_cat) if current_cat in categories else 0
                     
                     new_cat = st.selectbox(
@@ -208,11 +215,18 @@ with tab3:
         # Yearly Summary
         st.subheader("📅 Yearly Summary")
         yearly_summary = expenses_df.groupby(['Year', 'category'])['amount'].sum().reset_index()
+        # Yearly Pivot for CSV export (Hidden from UI)
         yearly_pivot = yearly_summary.pivot(index='Year', columns='category', values='amount').fillna(0)
-        st.dataframe(yearly_pivot.style.format("{:.2f} €"), use_container_width=True)
         
-        # Yearly Chart
-        st.bar_chart(yearly_pivot)
+        # Yearly Pie Chart (Category distribution across all years)
+        st.subheader("🥧 Overall Category Distribution")
+        total_by_category = expenses_df.groupby('category')['amount'].sum().reset_index()
+        fig_yearly = px.pie(total_by_category, values='amount', names='category', 
+                             title='Expenses by Category (All Time)',
+                             hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_yearly.update_traces(textinfo='percent+label')
+        st.plotly_chart(fig_yearly, width='stretch')
         
         st.download_button(
             label="📥 Download Yearly Summary CSV",
@@ -232,20 +246,27 @@ with tab3:
             month_df = expenses_df[expenses_df['Month'] == selected_month]
             monthly_summary = month_df.groupby('category')['amount'].sum().reset_index()
             
-            col_chart, col_table = st.columns([2, 1])
+            # Monthly Pie Chart
+            fig_monthly = px.pie(monthly_summary, values='amount', names='category',
+                                  title=f'Expense Distribution for {selected_month}',
+                                  hole=0.4,
+                                  color_discrete_sequence=px.colors.qualitative.Safe)
+            fig_monthly.update_traces(textinfo='percent+label')
+            st.plotly_chart(fig_monthly, width='stretch')
             
-            with col_chart:
-                st.bar_chart(monthly_summary.set_index('category'))
+            st.divider()
             
-            with col_table:
-                st.table(monthly_summary.style.format({"amount": "{:.2f} €"}))
+            # Key Metrics below the chart
+            mcol1, mcol2 = st.columns(2)
+            with mcol1:
                 st.metric("Total Monthly Expense", f"{monthly_summary['amount'].sum():.2f} €")
-                
+            with mcol2:
                 st.download_button(
                     label="📥 Download Monthly CSV",
                     data=monthly_summary.to_csv(index=False).encode('utf-8'),
                     file_name=f"summary_{selected_month}.csv",
                     mime="text/csv",
+                    key=f"dl_{selected_month}"
                 )
     else:
         st.info("No transaction data available to generate statistics.")

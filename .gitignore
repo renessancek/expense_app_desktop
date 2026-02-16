@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Project specific sensitive data
+rules.json
+*.pdf
+
+# OS junk
+.DS_Store

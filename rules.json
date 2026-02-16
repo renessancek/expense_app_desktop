@@ -1,0 +1,61 @@
+{
+    "mappings": {},
+    "rules": [
+        {
+            "keywords": [
+                "billa",
+                "spar",
+                "lidl",
+                "hofer"
+            ],
+            "category": "Supermarkt"
+        },
+        {
+            "keywords": [
+                "amazon",
+                "amzn"
+            ],
+            "category": "Amazon"
+        },
+        {
+            "keywords": [
+                "huk",
+                "allianz",
+                "versicherung",
+                "dkv"
+            ],
+            "category": "Versicherung"
+        },
+        {
+            "keywords": [
+                "steam",
+                "epic",
+                "nintendo",
+                "playstation",
+                "game"
+            ],
+            "category": "Computerspiele"
+        },
+        {
+            "keywords": [
+                "msci",
+                "etf",
+                "aktie",
+                "depot",
+                "trade",
+                "scalable",
+                "trade republic"
+            ],
+            "category": "Trading"
+        },
+        {
+            "keywords": [
+                "immobilie",
+                "miete",
+                "haus",
+                "grundsteuer"
+            ],
+            "category": "Haus"
+        }
+    ]
+}

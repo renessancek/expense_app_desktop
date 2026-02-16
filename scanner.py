@@ -11,6 +11,6 @@ class Scanner:
         if not os.path.exists(self.watch_path):
             os.makedirs(self.watch_path)
 
-    def scan_for_pdfs(self):
-        pattern = os.path.join(self.watch_path, "*.pdf")
+    def scan_for_csvs(self):
+        pattern = os.path.join(self.watch_path, "*.csv")
         return glob.glob(pattern)

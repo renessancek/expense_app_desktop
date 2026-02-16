@@ -4,8 +4,8 @@ A powerful and user-friendly desktop application for managing your personal fina
 
 ## ✨ Features
 
-- **📂 Automated Scanning**: Watches a specific directory for new PDF bank statements.
-- **📄 PDF Parsing**: Extracts transaction data (date, description, amount) from PDF statements.
+- **📂 Automated Scanning**: Watches a specific directory for new CSV bank statements.
+- **📄 CSV Parsing**: Extracts transaction data (Date, Description, Amount) from CSV files.
 - **🏷️ Smart Categorization**: Uses global rules and learned mappings to automatically categorize expenses.
 - **🖊️ Manual Overrides**: Easily correct categories and add new mappings directly from the UI.
 - **📊 Interactive Dashboard**:
@@ -18,8 +18,7 @@ A powerful and user-friendly desktop application for managing your personal fina
 
 - **Python 3.x**
 - **Streamlit**: For the interactive web interface.
-- **Pandas**: For data manipulation and analysis.
-- **pdfplumber**: To extract text from bank statement PDFs.
+- **Pandas**: For data manipulation and CSV parsing.
 - **watchdog**: For real-time directory monitoring.
 
 ## 🚀 Getting Started
@@ -50,15 +49,15 @@ python3 --version
    ```bash
    streamlit run app.py
    ```
-2. **Scan for PDFs**: Place your bank statement PDFs in the monitored directory (defaulting to the project root or as specified in `scanner.py`).
-3. **Upload Manually**: Use the file uploader in the "Transactions" tab to process PDFs directly.
+2. **Scan for CSVs**: Place your bank statement CSVs in the monitored directory (defaulting to the project root or as specified in `scanner.py`).
+3. **Upload Manually**: Use the file uploader in the "Transactions" tab to process CSVs directly.
 4. **Categorize**: Review transaction categories and use the dropdowns to train the app for better accuracy.
 
 ## 📁 Project Structure
 
 - `app.py`: Main Streamlit application and UI logic.
-- `scanner.py`: Logic for watching and scanning directories for new files.
-- `parser.py`: Extracts transaction data from PDF files.
+- `scanner.py`: Logic for watching and scanning directories for new CSV files.
+- `parser.py`: Extracts transaction data from CSV files.
 - `categorizer.py`: Manages rules and logic for transaction categorization.
 - `rules.json`: Stores global categorization rules and learned mappings.
 - `STARTUP_SETUP.md`: Detailed guide for Ubuntu startup integration.

@@ -34,13 +34,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("💰 Expense App Desktop")
 st.write(f"Scanning directory: `{scanner.watch_path}`")
+st.caption("Place your bank statements as **CSV files** in this folder.")
 
 # Sidebar for controls
 with st.sidebar:
     st.header("Actions")
-    if st.button("🔄 Scan for new PDFs"):
+    if st.button("🔄 Scan for new CSVs"):
         st.rerun()
     
     if st.button("🛑 Shutdown App"):
@@ -61,21 +61,21 @@ with st.sidebar:
 tab1, tab2, tab3 = st.tabs(["📊 Transactions", "⚙️ Category Editor", "📈 Statistics"])
 
 with tab1:
-    uploaded_files = st.file_uploader("Upload bank statements (PDF)", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload bank statements (CSV)", type="csv", accept_multiple_files=True)
     
-    pdfs = scanner.scan_for_pdfs()
+    csvs = scanner.scan_for_csvs()
     all_transactions = []
     
-    # Process scanned PDFs
-    for pdf in pdfs:
-        transactions = parser.parse_bank_statement(pdf)
+    # Process scanned CSVs
+    for csv_file in csvs:
+        transactions = parser.parse_bank_statement(csv_file)
         for tx in transactions:
-            tx['file'] = os.path.basename(pdf)
+            tx['file'] = os.path.basename(csv_file)
             tx['source'] = 'Scanned'
             tx['category'] = categorizer.suggest_category(tx['description'])
             all_transactions.append(tx)
             
-    # Process uploaded PDFs
+    # Process uploaded CSVs
     if uploaded_files:
         for uploaded_file in uploaded_files:
             transactions = parser.parse_bank_statement(uploaded_file)
@@ -86,7 +86,7 @@ with tab1:
                 all_transactions.append(tx)
 
     if not all_transactions:
-        st.info("No bank statements found. Scan the folder or upload a PDF manually.")
+        st.info("No bank statements found. Scan the folder or upload a CSV manually.")
     else:
         df = pd.DataFrame(all_transactions)
         

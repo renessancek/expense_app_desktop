@@ -1,52 +1,64 @@
-import pdfplumber
-import re
+import pandas as pd
 import uuid
+import os
 
 class Parser:
     @staticmethod
     def parse_bank_statement(file_input):
+        """
+        Parses a bank statement from a CSV file.
+        Expects columns: Date, Description, Amount
+        Handles both dot and comma as decimal separators.
+        """
         transactions = []
         try:
-            with pdfplumber.open(file_input) as pdf:
-                for page in pdf.pages:
-                    text = page.extract_text()
-                    if text:
-                        transactions.extend(Parser.extract_transactions_from_text(text))
-        except Exception as e:
-            print(f"Error parsing: {e}")
-        return transactions
+            # Try semicolon first (common in German banks), then comma
+            try:
+                df = pd.read_csv(file_input, sep=';', encoding='utf-8')
+                if 'Amount' not in df.columns and 'Betrag' not in df.columns:
+                    raise ValueError("Wrong separator")
+            except:
+                df = pd.read_csv(file_input, sep=',', encoding='utf-8')
 
-    @staticmethod
-    def extract_transactions_from_text(text):
-        transactions = []
-        # Regex for Date (DD.MM.YYYY or DD.MM.YY)
-        date_regex = r'\d{2}\.\d{2}\.\d{2,4}'
-        
-        # Split text into lines to process each line or group of lines
-        lines = text.split('\n')
-        
-        for line in lines:
-            date_match = re.search(date_regex, line)
-            if date_match:
-                # Look for amount (e.g., -123,45 or 1.234,56)
-                # German bank statements often use comma for decimals
-                amount_regex = r'(-?\d{1,3}(\.\d{3})*,\d{2})'
-                amount_match = re.search(amount_regex, line)
-                
-                if amount_match:
-                    date = date_match.group(0)
-                    amount_str = amount_match.group(1).replace('.', '').replace(',', '.')
-                    amount = float(amount_str)
+            # Map common column names
+            col_map = {
+                'Date': ['Date', 'Datum', 'date'],
+                'Description': ['Description', 'Verwendungszweck', 'description', 'Name'],
+                'Amount': ['Amount', 'Betrag', 'amount', 'Wert']
+            }
+            
+            final_cols = {}
+            for target, options in col_map.items():
+                for opt in options:
+                    if opt in df.columns:
+                        final_cols[target] = opt
+                        break
+            
+            if len(final_cols) < 3:
+                print(f"Missing columns in CSV. Found: {list(df.columns)}")
+                return []
+
+            for _, row in df.iterrows():
+                try:
+                    amount_val = row[final_cols['Amount']]
+                    if isinstance(amount_val, str):
+                        # Handle German format: 1.234,56
+                        amount_str = amount_val.replace('.', '').replace(',', '.')
+                        amount = float(amount_str)
+                    else:
+                        amount = float(amount_val)
                     
-                    # The description is usually what's left between the date and the amount
-                    description = line.replace(date, '').replace(amount_match.group(0), '').strip()
+                    transactions.append({
+                        'id': str(uuid.uuid4())[:9],
+                        'date': str(row[final_cols['Date']]),
+                        'description': str(row[final_cols['Description']])[:100],
+                        'amount': amount,
+                        'category': None
+                    })
+                except Exception as row_error:
+                    print(f"Skipping row due to error: {row_error}")
                     
-                    if description:
-                        transactions.append({
-                            'id': str(uuid.uuid4())[:9],
-                            'date': date,
-                            'description': description[:100],
-                            'amount': amount,
-                            'category': None
-                        })
+        except Exception as e:
+            print(f"Error parsing CSV: {e}")
+            
         return transactions

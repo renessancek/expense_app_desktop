@@ -214,6 +214,13 @@ with tab3:
         # Yearly Chart
         st.bar_chart(yearly_pivot)
         
+        st.download_button(
+            label="📥 Download Yearly Summary CSV",
+            data=yearly_pivot.to_csv().encode('utf-8'),
+            file_name=f"yearly_summary.csv",
+            mime="text/csv",
+        )
+        
         st.divider()
         
         # Monthly Summary
@@ -233,6 +240,13 @@ with tab3:
             with col_table:
                 st.table(monthly_summary.style.format({"amount": "{:.2f} €"}))
                 st.metric("Total Monthly Expense", f"{monthly_summary['amount'].sum():.2f} €")
+                
+                st.download_button(
+                    label="📥 Download Monthly CSV",
+                    data=monthly_summary.to_csv(index=False).encode('utf-8'),
+                    file_name=f"summary_{selected_month}.csv",
+                    mime="text/csv",
+                )
     else:
         st.info("No transaction data available to generate statistics.")
 

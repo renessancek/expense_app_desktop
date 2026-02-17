@@ -10,6 +10,7 @@ venv/
 
 # Project specific sensitive data
 rules.json
+backups/
 *.pdf
 
 # OS junk

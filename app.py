@@ -65,32 +65,44 @@ tab1, tab2, tab3 = st.tabs(["📊 Transactions", "⚙️ Category Editor", "📈
 with tab1:
     uploaded_files = st.file_uploader("Upload bank statements (CSV)", type="csv", accept_multiple_files=True)
     
-# Cached transaction processing
+# Cached parsing of bank statements
 @st.cache_data
-def get_processed_data(rules_mtime, scanned_files_hash):
+def get_raw_transactions(scanned_files_hash):
     """
-    Loads and categorizes all transactions. 
-    Invalidates if rules change or files change.
+    Reads and parses all bank statements. 
+    Invalidates only if files are added or changed.
     """
     scanned_csvs = scanner.scan_for_csvs()
-    all_tx = []
-    
-    # Process scanned CSVs
+    raw_tx = []
     for csv_file in scanned_csvs:
         transactions = parser.parse_bank_statement(csv_file)
         for tx in transactions:
             tx['file'] = os.path.basename(csv_file)
             tx['source'] = 'Scanned'
-            tx['category'] = categorizer.suggest_category(tx['description'])
-            all_tx.append(tx)
-    return all_tx
+            raw_tx.append(tx)
+    return raw_tx
+
+# Cached categorization
+@st.cache_data
+def get_categorized_transactions(raw_transactions, rules_mtime):
+    """
+    Applies categorization rules to raw transactions.
+    Invalidates if rules change or raw data changes.
+    """
+    import copy
+    categorized_tx = copy.deepcopy(raw_transactions)
+    for tx in categorized_tx:
+        tx['category'] = categorizer.suggest_category(tx['description'])
+    return categorized_tx
 
 # Get cache invalidation keys
-rules_mtime = os.path.getmtime(categorizer.rules_path) if os.path.exists(categorizer.rules_path) else 0
 scanned_csvs = scanner.scan_for_csvs()
 files_hash = hashlib.md5("".join(sorted(scanned_csvs)).encode()).hexdigest()
+rules_mtime = os.path.getmtime(categorizer.rules_path) if os.path.exists(categorizer.rules_path) else 0
 
-all_transactions = get_processed_data(rules_mtime, files_hash)
+# Process Data
+raw_tx = get_raw_transactions(files_hash)
+all_transactions = get_categorized_transactions(raw_tx, rules_mtime)
 
 # Process uploaded CSVs (Keep these separate for now as uploader state is session-dependent)
 if uploaded_files:
@@ -115,11 +127,42 @@ if uploaded_files:
 
         st.divider()
 
-        # Transaction Table with Category Assignment
-        st.subheader("Recent Transactions")
+        # --- Filtering Logic ---
+        st.subheader("Filter transactions")
+        available_categories = ["All"] + categorizer.get_all_categories()
+        selected_category = st.selectbox("Filter by Category", options=available_categories, index=0)
         
-        for i, row in df.iterrows():
-            with st.expander(f"{row['date']} - {row['description'][:50]}... ({row['amount']:.2f} €)", expanded=True):
+        if selected_category != "All":
+            df = df[df['category'] == selected_category]
+
+        # Sort by date for better display
+        df['date'] = pd.to_datetime(df['date'], dayfirst=True)
+        df = df.sort_values(by='date', ascending=False)
+        
+        # --- Pagination Logic ---
+        items_per_page = 50
+        total_pages = (len(df) - 1) // items_per_page + 1
+        
+        if total_pages > 1:
+            page = st.number_input("Page", min_value=1, max_value=total_pages, step=1, value=1)
+        else:
+            page = 1
+            
+        start_idx = (page - 1) * items_per_page
+        end_idx = min(start_idx + items_per_page, len(df))
+        
+        st.write(f"Showing transactions {start_idx + 1} to {end_idx} of {len(df)}")
+        
+        display_df = df.iloc[start_idx:end_idx]
+        
+        # Get sorted categories
+        all_cats = categorizer.get_all_categories()
+        if "Sonstiges" in all_cats:
+            all_cats.remove("Sonstiges")
+        categories = sorted(all_cats) + ["Sonstiges", "Custom..."]
+
+        for i, row in display_df.iterrows():
+            with st.expander(f"{row['date'].strftime('%Y-%m-%d')} - {row['description'][:50]}... ({row['amount']:.2f} €)", expanded=True):
                 col_left, col_right = st.columns([2, 1])
                 
                 with col_left:
@@ -128,14 +171,7 @@ if uploaded_files:
                 
                 with col_right:
                     current_cat = row['category']
-                    
-                    # Fetch all categories and ensure specific order
-                    all_cats = categorizer.get_all_categories()
-                    if "Sonstiges" in all_cats:
-                        all_cats.remove("Sonstiges")
-                    categories = ["Sonstiges"] + all_cats + ["Custom..."]
-                    
-                    index = categories.index(current_cat) if current_cat in categories else 0
+                    index = categories.index(current_cat) if current_cat in categories else categories.index("Sonstiges")
                     
                     new_cat = st.selectbox(
                         "Category",
@@ -169,7 +205,9 @@ with tab2:
         if not categorizer.mappings:
             st.info("No learned mappings yet. Assign categories in the Transactions tab to see them here.")
         else:
-            for keyword, category in list(categorizer.mappings.items()):
+            # Sort mappings alphabetically by keyword
+            sorted_mappings = dict(sorted(categorizer.mappings.items()))
+            for keyword, category in sorted_mappings.items():
                 col1, col2, col3 = st.columns([2, 2, 1])
                 col1.write(f"`{keyword}`")
                 col2.write(f"**{category}**")
@@ -182,7 +220,9 @@ with tab2:
         st.subheader("Global Rules")
         st.write("These are the default rules used for initial categorization.")
         
-        for i, rule in enumerate(categorizer.rules):
+        # Sort rules alphabetically by category
+        sorted_rules = sorted(categorizer.rules, key=lambda x: x['category'])
+        for i, rule in enumerate(sorted_rules):
             with st.expander(f"Category: {rule['category']}"):
                 current_keywords = ", ".join(rule['keywords'])
                 new_keywords_str = st.text_input("Keywords (comma separated)", value=current_keywords, key=f"edit_rule_kw_{i}")

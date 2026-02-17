@@ -17,6 +17,24 @@ class Categorizer:
             self.rules = []
 
     def save_rules(self):
+        # Create backup before saving
+        if os.path.exists(self.rules_path):
+            import datetime
+            backup_dir = os.path.join(os.path.dirname(os.path.abspath(self.rules_path)), 'backups')
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(backup_dir, f"rules_backup_{timestamp}.json")
+            
+            import shutil
+            shutil.copy2(self.rules_path, backup_path)
+            
+            # Keep only the last 10 backups to save space
+            backups = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith("rules_backup_")])
+            if len(backups) > 10:
+                for old_backup in backups[:-10]:
+                    os.remove(old_backup)
+
         data = {
             'mappings': self.mappings,
             'rules': self.rules

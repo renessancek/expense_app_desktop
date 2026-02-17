@@ -86,6 +86,24 @@ class Categorizer:
                 return True
         return False
 
+    def rename_category(self, old_name, new_name):
+        """Renames a category in both mappings and rules."""
+        if not new_name or old_name == new_name:
+            return False
+            
+        # Update mappings
+        for keyword, category in self.mappings.items():
+            if category == old_name:
+                self.mappings[keyword] = new_name
+                
+        # Update rules
+        for rule in self.rules:
+            if rule['category'] == old_name:
+                rule['category'] = new_name
+                
+        self.save_rules()
+        return True
+
     def extract_keyword(self, description):
         # Extract a potential keyword from a description (e.g., the first two words)
         words = description.split()

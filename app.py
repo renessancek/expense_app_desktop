@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import plotly.express as px
+import hashlib
 from scanner import Scanner
 from parser import Parser
 from categorizer import Categorizer
@@ -64,27 +65,42 @@ tab1, tab2, tab3 = st.tabs(["📊 Transactions", "⚙️ Category Editor", "📈
 with tab1:
     uploaded_files = st.file_uploader("Upload bank statements (CSV)", type="csv", accept_multiple_files=True)
     
-    csvs = scanner.scan_for_csvs()
-    all_transactions = []
+# Cached transaction processing
+@st.cache_data
+def get_processed_data(rules_mtime, scanned_files_hash):
+    """
+    Loads and categorizes all transactions. 
+    Invalidates if rules change or files change.
+    """
+    scanned_csvs = scanner.scan_for_csvs()
+    all_tx = []
     
     # Process scanned CSVs
-    for csv_file in csvs:
+    for csv_file in scanned_csvs:
         transactions = parser.parse_bank_statement(csv_file)
         for tx in transactions:
             tx['file'] = os.path.basename(csv_file)
             tx['source'] = 'Scanned'
             tx['category'] = categorizer.suggest_category(tx['description'])
+            all_tx.append(tx)
+    return all_tx
+
+# Get cache invalidation keys
+rules_mtime = os.path.getmtime(categorizer.rules_path) if os.path.exists(categorizer.rules_path) else 0
+scanned_csvs = scanner.scan_for_csvs()
+files_hash = hashlib.md5("".join(sorted(scanned_csvs)).encode()).hexdigest()
+
+all_transactions = get_processed_data(rules_mtime, files_hash)
+
+# Process uploaded CSVs (Keep these separate for now as uploader state is session-dependent)
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        transactions = parser.parse_bank_statement(uploaded_file)
+        for tx in transactions:
+            tx['file'] = uploaded_file.name
+            tx['source'] = 'Uploaded'
+            tx['category'] = categorizer.suggest_category(tx['description'])
             all_transactions.append(tx)
-            
-    # Process uploaded CSVs
-    if uploaded_files:
-        for uploaded_file in uploaded_files:
-            transactions = parser.parse_bank_statement(uploaded_file)
-            for tx in transactions:
-                tx['file'] = uploaded_file.name
-                tx['source'] = 'Uploaded'
-                tx['category'] = categorizer.suggest_category(tx['description'])
-                all_transactions.append(tx)
 
     if not all_transactions:
         st.info("No bank statements found. Scan the folder or upload a CSV manually.")
@@ -196,6 +212,22 @@ with tab2:
                     st.rerun()
                 else:
                     st.error("Please provide both category and keywords.")
+        
+        st.divider()
+        st.subheader("🏷️ Rename Category")
+        all_existing_cats = categorizer.get_all_categories()
+        cat_to_rename = st.selectbox("Select Category to Rename", options=all_existing_cats)
+        new_cat_name = st.text_input("New Name", key="rename_input")
+        
+        if st.button("Apply Rename"):
+            if new_cat_name:
+                if categorizer.rename_category(cat_to_rename, new_cat_name):
+                    st.success(f"Renamed '{cat_to_rename}' to '{new_cat_name}'")
+                    st.rerun()
+                else:
+                    st.error("Rename failed. Ensure names are different.")
+            else:
+                st.warning("Please enter a new name.")
 
 with tab3:
     st.header("📈 Expense Statistics")

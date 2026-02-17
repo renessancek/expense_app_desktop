@@ -124,7 +124,12 @@ if uploaded_files:
         col1.metric("Total Transactions", len(df))
         with col2:
             total_spent = abs(df[df['amount'] < 0]['amount'].sum())
-            st.markdown(f"Total Spent<br><h2 style='color: #ff4b4b; margin-top: -15px;'>{total_spent:.2f} €</h2>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div style='display: flex; flex-direction: column;'>
+                    <div style='font-size: 0.8rem; color: rgba(250, 250, 250, 0.6);'>Total Spent</div>
+                    <div style='font-size: 1.8rem; font-weight: 600; color: #ff4b4b; padding-top: 5px;'>{total_spent:.2f} €</div>
+                </div>
+            """, unsafe_allow_html=True)
         col3.metric("Categorized", df[df['category'] != 'Sonstiges'].shape[0])
 
         st.divider()
@@ -383,7 +388,12 @@ with tab3:
             mcol1, mcol2 = st.columns(2)
             with mcol1:
                 monthly_total = abs(monthly_summary['amount'].sum())
-                st.markdown(f"Total Monthly Expense<br><h2 style='color: #ff4b4b; margin-top: -15px;'>{monthly_total:.2f} €</h2>", unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div style='display: flex; flex-direction: column;'>
+                        <div style='font-size: 0.8rem; color: rgba(250, 250, 250, 0.6);'>Total Monthly Expense</div>
+                        <div style='font-size: 1.8rem; font-weight: 600; color: #ff4b4b; padding-top: 5px;'>{monthly_total:.2f} €</div>
+                    </div>
+                """, unsafe_allow_html=True)
             with mcol2:
                 st.download_button(
                     label="📥 Download Monthly CSV",

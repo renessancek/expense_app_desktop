@@ -122,6 +122,22 @@ class Categorizer:
         self.save_rules()
         return True
 
+    def restore_latest_backup(self):
+        """Restores the most recent file from the backups directory."""
+        backup_dir = os.path.join(os.path.dirname(os.path.abspath(self.rules_path)), 'backups')
+        if not os.path.exists(backup_dir):
+            return False, "No backups found."
+            
+        backups = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith("rules_backup_")])
+        if not backups:
+            return False, "No backups found."
+            
+        latest_backup = backups[-1]
+        import shutil
+        shutil.copy2(latest_backup, self.rules_path)
+        self.load_rules()
+        return True, f"Restored from {os.path.basename(latest_backup)}"
+
     def extract_keyword(self, description):
         # Extract a potential keyword from a description (e.g., the first two words)
         words = description.split()

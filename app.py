@@ -122,7 +122,9 @@ if uploaded_files:
         # Display summary
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Transactions", len(df))
-        col2.metric("Total Spent", f"{df[df['amount'] < 0]['amount'].sum():.2f} €")
+        with col2:
+            total_spent = abs(df[df['amount'] < 0]['amount'].sum())
+            st.markdown(f"Total Spent<br><h2 style='color: #ff4b4b; margin-top: -15px;'>{total_spent:.2f} €</h2>", unsafe_allow_html=True)
         col3.metric("Categorized", df[df['category'] != 'Sonstiges'].shape[0])
 
         st.divider()
@@ -136,7 +138,7 @@ if uploaded_files:
             df = df[df['category'] == selected_category]
 
         # Sort by date for better display
-        df['date'] = pd.to_datetime(df['date'], dayfirst=True)
+        df['date'] = pd.to_datetime(df['date'], dayfirst=True, format='mixed')
         df = df.sort_values(by='date', ascending=False)
         
         # --- Pagination Logic ---
@@ -196,6 +198,15 @@ if uploaded_files:
 with tab2:
     st.header("⚙️ Category Management")
     
+    # Emergency Restore Button
+    if st.button("⏪ Restore Latest Backup", help="Fixes rule corruption by undoing the last change."):
+        success, message = categorizer.restore_latest_backup()
+        if success:
+            st.success(message)
+            st.rerun()
+        else:
+            st.error(message)
+
     col_a, col_b = st.columns(2)
     
     with col_a:
@@ -223,20 +234,21 @@ with tab2:
         # Sort rules alphabetically by category
         sorted_rules = sorted(categorizer.rules, key=lambda x: x['category'])
         for i, rule in enumerate(sorted_rules):
-            with st.expander(f"Category: {rule['category']}"):
+            cat_key = rule['category']
+            with st.expander(f"Category: {cat_key}"):
                 current_keywords = ", ".join(rule['keywords'])
-                new_keywords_str = st.text_input("Keywords (comma separated)", value=current_keywords, key=f"edit_rule_kw_{i}")
+                new_keywords_str = st.text_input("Keywords (comma separated)", value=current_keywords, key=f"edit_rule_kw_{cat_key}")
                 
                 col1, col2 = st.columns(2)
-                if col1.button("💾 Save Keywords", key=f"save_rule_kw_{i}"):
+                if col1.button("💾 Save Keywords", key=f"save_rule_kw_{cat_key}"):
                     new_keywords = [k.strip().lower() for k in new_keywords_str.split(",") if k.strip()]
-                    categorizer.update_rule_keywords(rule['category'], new_keywords)
-                    st.success(f"Updated keywords for {rule['category']}")
+                    categorizer.update_rule_keywords(cat_key, new_keywords)
+                    st.success(f"Updated keywords for {cat_key}")
                     st.rerun()
                 
-                if col2.button("🗑️ Delete Rule", key=f"del_rule_{rule['category']}"):
-                    categorizer.delete_rule(rule['category'])
-                    st.success(f"Deleted rule for {rule['category']}")
+                if col2.button("🗑️ Delete Rule", key=f"del_rule_{cat_key}"):
+                    categorizer.delete_rule(cat_key)
+                    st.success(f"Deleted rule for {cat_key}")
                     st.rerun()
         
         st.divider()
@@ -274,11 +286,37 @@ with tab3:
     
     if all_transactions:
         df_stats = pd.DataFrame(all_transactions)
-        # Convert date to datetime. Handle German format DD.MM.YYYY
-        df_stats['date'] = pd.to_datetime(df_stats['date'], format='%d.%m.%Y', dayfirst=True)
+        df_stats['date'] = pd.to_datetime(df_stats['date'], dayfirst=True, format='mixed')
         
-        # We only care about expenses (negative amounts)
-        expenses_df = df_stats[df_stats['amount'] < 0].copy()
+        # --- Interactive Category Filter ---
+        st.subheader("🔍 Filter Categories")
+        available_stats_cats = sorted(df_stats['category'].unique())
+        
+        # Session state to manage multiselect
+        if 'stats_filter' not in st.session_state:
+            st.session_state.stats_filter = available_stats_cats
+            
+        col_f1, col_f2 = st.columns([3, 1])
+        with col_f1:
+            selected_stats_cats = st.multiselect(
+                "Select categories to include in charts",
+                options=available_stats_cats,
+                key='stats_filter'
+            )
+        with col_f2:
+            st.write(" ") # Visual alignment
+            if st.button("✅ Select All"):
+                st.session_state.stats_filter = available_stats_cats
+                st.rerun()
+        
+        # Filter the data
+        df_stats = df_stats[df_stats['category'].isin(selected_stats_cats)]
+        
+        if df_stats.empty:
+            st.warning("No categories selected. Please select at least one category to reflect in charts.")
+        else:
+            # We only care about expenses (negative amounts)
+            expenses_df = df_stats[df_stats['amount'] < 0].copy()
         expenses_df['amount'] = expenses_df['amount'].abs() # Work with positive numbers for easier reading
         
         expenses_df['Year'] = expenses_df['date'].dt.year
@@ -300,11 +338,24 @@ with tab3:
         fig_yearly.update_traces(textinfo='percent+label')
         st.plotly_chart(fig_yearly, width='stretch')
         
+        # Prepare Excel Export (Multi-sheet)
+        import io
+        excel_data = io.BytesIO()
+        with pd.ExcelWriter(excel_data, engine='openpyxl') as writer:
+            # Monthly sheets
+            for month in sorted(expenses_df['Month'].unique()):
+                month_df = expenses_df[expenses_df['Month'] == month]
+                month_summary = month_df.groupby('category')['amount'].sum().reset_index()
+                month_summary.to_excel(writer, sheet_name=month, index=False)
+            
+            # Yearly Summary Sheet
+            total_by_category.to_excel(writer, sheet_name="Yearly Summary", index=False)
+
         st.download_button(
-            label="📥 Download Yearly Summary CSV",
-            data=yearly_pivot.to_csv().encode('utf-8'),
-            file_name=f"yearly_summary.csv",
-            mime="text/csv",
+            label="📥 Download Yearly Report (Excel)",
+            data=excel_data.getvalue(),
+            file_name=f"yearly_report_{expenses_df['date'].dt.year.iloc[0]}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         
         st.divider()
@@ -331,7 +382,8 @@ with tab3:
             # Key Metrics below the chart
             mcol1, mcol2 = st.columns(2)
             with mcol1:
-                st.metric("Total Monthly Expense", f"{monthly_summary['amount'].sum():.2f} €")
+                monthly_total = abs(monthly_summary['amount'].sum())
+                st.markdown(f"Total Monthly Expense<br><h2 style='color: #ff4b4b; margin-top: -15px;'>{monthly_total:.2f} €</h2>", unsafe_allow_html=True)
             with mcol2:
                 st.download_button(
                     label="📥 Download Monthly CSV",

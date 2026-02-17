@@ -44,8 +44,10 @@ class Parser:
         # Map common column names (Prioritizing specific regional headers)
         col_map = {
             'Date': ['Buchungsdatum', 'Datum', 'Date'],
-            'Description': ['Buchungstext', 'Verwendungszweck', 'Description'],
-            'Amount': ['Betrag', 'Amount', 'Wert']
+            'Description': ['Buchungstext', 'Verwendungszweck', 'Description', 'Name', 'Item Title'],
+            'Amount': ['Betrag', 'Amount', 'Wert', 'Total'],
+            'TxID': ['Transaction ID', 'Referenz', 'id'],
+            'Type': ['Type', 'Status']
         }
         
         final_cols = {}
@@ -55,7 +57,9 @@ class Parser:
                     final_cols[target] = opt
                     break
         
-        if len(final_cols) < 3:
+        # Require at least Date, Description, and Amount
+        required = ['Date', 'Description', 'Amount']
+        if not all(k in final_cols for k in required):
             print(f"Missing essential columns in CSV. Found: {list(df.columns)}")
             return []
 
@@ -63,20 +67,50 @@ class Parser:
         import hashlib
         for _, row in df.iterrows():
             try:
+                # Handle empty/NaN values
+                if pd.isna(row[final_cols['Amount']]) or pd.isna(row[final_cols['Date']]):
+                    continue
+
                 amount_val = row[final_cols['Amount']]
                 if isinstance(amount_val, str):
-                    # Handle German/Austrian format: 1.234,56
-                    # Remove thousands separator and fix decimal
+                    # Handle formats like -100,00 or 1.234,56
                     amount_str = amount_val.replace('.', '').replace(',', '.')
                     amount = float(amount_str)
                 else:
                     amount = float(amount_val)
                 
                 date_str = str(row[final_cols['Date']])
-                desc_str = str(row[final_cols['Description']])
                 
-                # Generate a stable ID based on transaction data
-                hash_input = f"{date_str}{desc_str}{amount}".encode('utf-8')
+                # Robust Description Extraction
+                # Combine all descriptive fields that exist and are not empty
+                desc_parts = []
+                potential_desc_keys = ['Description', 'Type'] # Description maps to Name/Item Title mapped in col_map
+                
+                # Re-map specifically for PayPal's multi-column descriptions
+                # If 'Name' (mapped to Description) and 'Item Title' both exist, we want both.
+                # In current col_map, 'Description' takes the first match. Let's be explicit:
+                
+                for col in ['Name', 'Item Title', 'Type', 'Buchungstext', 'Verwendungszweck']:
+                    if col in df.columns and not pd.isna(row[col]):
+                        val = str(row[col]).strip()
+                        if val and val.lower() != 'nan' and val not in desc_parts:
+                            desc_parts.append(val)
+                
+                desc_str = " - ".join(desc_parts) if desc_parts else "Unknown Transaction"
+                
+                # Exclude internal PayPal/Bitpanda records (Check descriptive fields)
+                exclusions = ["General Currency Conversion", "General Authorization"]
+                if any(ex in desc_str for ex in exclusions):
+                    continue
+                
+                # Use provided Transaction ID if available, otherwise hash details
+                tx_unique_id = str(row[final_cols['TxID']]) if 'TxID' in final_cols and not pd.isna(row[final_cols['TxID']]) else None
+                
+                if tx_unique_id:
+                    hash_input = tx_unique_id.encode('utf-8')
+                else:
+                    hash_input = f"{date_str}{desc_str}{amount}".encode('utf-8')
+                
                 tx_id = hashlib.md5(hash_input).hexdigest()[:10]
                 
                 transactions.append({

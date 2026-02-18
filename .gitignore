@@ -12,6 +12,8 @@ venv/
 rules.json
 backups/
 *.pdf
+*.csv
+*.xlsx
 
 # OS junk
 .DS_Store

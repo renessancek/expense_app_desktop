@@ -64,7 +64,7 @@ python3 --version
 
 ## 🔧 Ubuntu Startup Setup
 
-To have the app open automatically when you log in to Ubuntu, refer to the [Ubuntu Startup Setup Guide](file:///home/ren/Documents/antigravity_projects/expense_app_desktop/STARTUP_SETUP.md).
+To have the app open automatically when you log in to Ubuntu, refer to the [Ubuntu Startup Setup Guide](STARTUP_SETUP.md).
 
 ---
 *Created by Antigravity for a seamless expense tracking experience.*

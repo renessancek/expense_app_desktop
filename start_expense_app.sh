@@ -1,4 +1,12 @@
 #!/bin/bash
-cd /home/ren/Documents/antigravity_projects/expense_app_desktop
-source venv/bin/activate
-streamlit run app.py --server.headless true
+# Automatically identify the project directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR"
+
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    streamlit run app.py --server.headless true
+else
+    echo "Virtual environment not found. Please ensure 'venv' exists in $SCRIPT_DIR"
+    exit 1
+fi

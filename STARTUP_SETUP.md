@@ -7,17 +7,20 @@ Create a file named `start_expense_app.sh` in the project directory:
 
 ```bash
 #!/bin/bash
-cd /home/ren/Documents/antigravity_projects/expense_app_desktop
+# Automatically identify the project directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR"
+source venv/bin/activate
 streamlit run app.py --server.headless true
 ```
 Make it executable:
-`chmod +x /home/ren/Documents/antigravity_projects/expense_app_desktop/start_expense_app.sh`
+`chmod +x start_expense_app.sh`
 
 ## 2. Add to Startup Applications
 1. Open the **Startup Applications** tool from the Ubuntu application menu.
 2. Click **Add**.
 3. Name: `Expense App Desktop`
-4. Command: `/home/ren/Documents/antigravity_projects/expense_app_desktop/start_expense_app.sh`
+4. Command: `/path/to/your/project/start_expense_app.sh` (Replace with the absolute path to the script on your machine)
 5. Comment: `Starts the expense app scanner and UI`
 6. Click **Add**.
 
@@ -27,7 +30,7 @@ You can also create a file at `~/.config/autostart/expense_app.desktop`:
 ```ini
 [Desktop Entry]
 Type=Application
-Exec=/home/ren/Documents/antigravity_projects/expense_app_desktop/start_expense_app.sh
+Exec=/path/to/your/project/start_expense_app.sh
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true

@@ -322,46 +322,109 @@ with tab3:
         else:
             # We only care about expenses (negative amounts)
             expenses_df = df_stats[df_stats['amount'] < 0].copy()
-        expenses_df['amount'] = expenses_df['amount'].abs() # Work with positive numbers for easier reading
-        
-        expenses_df['Year'] = expenses_df['date'].dt.year
-        expenses_df['Month'] = expenses_df['date'].dt.strftime('%Y-%m')
-        
-        # Yearly Summary
-        st.subheader("📅 Yearly Summary")
-        yearly_summary = expenses_df.groupby(['Year', 'category'])['amount'].sum().reset_index()
-        # Yearly Pivot for CSV export (Hidden from UI)
-        yearly_pivot = yearly_summary.pivot(index='Year', columns='category', values='amount').fillna(0)
-        
-        # Yearly Pie Chart (Category distribution across all years)
-        st.subheader("🥧 Overall Category Distribution")
-        total_by_category = expenses_df.groupby('category')['amount'].sum().reset_index()
-        fig_yearly = px.pie(total_by_category, values='amount', names='category', 
-                             title='Expenses by Category (All Time)',
-                             hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig_yearly.update_traces(textinfo='percent+label')
-        st.plotly_chart(fig_yearly, width='stretch')
-        
-        # Prepare Excel Export (Multi-sheet)
-        import io
-        excel_data = io.BytesIO()
-        with pd.ExcelWriter(excel_data, engine='openpyxl') as writer:
-            # Monthly sheets
-            for month in sorted(expenses_df['Month'].unique()):
-                month_df = expenses_df[expenses_df['Month'] == month]
-                month_summary = month_df.groupby('category')['amount'].sum().reset_index()
-                month_summary.to_excel(writer, sheet_name=month, index=False)
+            expenses_df['amount'] = expenses_df['amount'].abs() # Work with positive numbers for easier reading
             
-            # Yearly Summary Sheet
-            total_by_category.to_excel(writer, sheet_name="Yearly Summary", index=False)
+            expenses_df['Year'] = expenses_df['date'].dt.year
+            expenses_df['Month'] = expenses_df['date'].dt.strftime('%Y-%m')
+            
+            # Yearly Summary
+            st.subheader("📅 Yearly Summary")
+            yearly_summary = expenses_df.groupby(['Year', 'category'])['amount'].sum().reset_index()
+            # Yearly Pivot for comparison
+            yearly_pivot = yearly_summary.pivot(index='category', columns='Year', values='amount').fillna(0).reset_index()
 
-        st.download_button(
-            label="📥 Download Yearly Report (Excel)",
-            data=excel_data.getvalue(),
-            file_name=f"yearly_report_{expenses_df['date'].dt.year.iloc[0]}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+            # --- Average Monthly Expense Calculation ---
+            num_months = expenses_df['Month'].nunique()
+            total_by_category = expenses_df.groupby('category')['amount'].sum().reset_index()
+            
+            if num_months > 0:
+                avg_monthly_expenses = total_by_category.copy()
+                avg_monthly_expenses['average_per_month'] = avg_monthly_expenses['amount'] / num_months
+                avg_monthly_expenses = avg_monthly_expenses.sort_values(by='average_per_month', ascending=False)
+                
+                st.subheader("📊 Average Monthly Expense per Category")
+                st.caption(f"Calculated over {num_months} unique months in the selected period.")
+                
+                # Display as a clean dataframe
+                display_avg_df = avg_monthly_expenses[['category', 'average_per_month']].copy()
+                display_avg_df.columns = ['Category', 'Avg. Monthly Expense (€)']
+                st.dataframe(
+                    display_avg_df.style.format({'Avg. Monthly Expense (€)': "{:.2f}"}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("Insufficient data to calculate monthly averages (no expense months found).")
+            
+            # Yearly Pie Chart (Category distribution across all years)
+            st.subheader("🥧 Overall Category Distribution")
+            if not total_by_category.empty:
+                fig_yearly = px.pie(total_by_category, values='amount', names='category', 
+                                     title='Expenses by Category (All Time - Selected Filter)',
+                                     hole=0.4,
+                                     color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_yearly.update_traces(textinfo='percent+label')
+                st.plotly_chart(fig_yearly, width='stretch')
+            else:
+                st.info("No expense data to display in pie chart.")
+            
+            # Prepare Excel Export (Multi-sheet)
+            import io
+            excel_data = io.BytesIO()
+            with pd.ExcelWriter(excel_data, engine='openpyxl') as writer:
+                # Monthly sheets
+                for month in sorted(expenses_df['Month'].unique()):
+                    month_df = expenses_df[expenses_df['Month'] == month]
+                    month_summary = month_df.groupby('category')['amount'].sum().reset_index()
+                    # Sort by amount descending
+                    month_summary = month_summary.sort_values('amount', ascending=False)
+                    # Add Total row
+                    total_row = pd.DataFrame([{'category': 'TOTAL', 'amount': month_summary['amount'].sum()}])
+                    month_summary = pd.concat([month_summary, total_row], ignore_index=True)
+                    month_summary.to_excel(writer, sheet_name=month, index=False)
+                
+                # Monthly Totals Sheet
+                monthly_totals = expenses_df.groupby('Month')['amount'].sum().reset_index()
+                # Sort by amount descending
+                monthly_totals = monthly_totals.sort_values('amount', ascending=False)
+                # Add Grand Total
+                grand_monthly_total = pd.DataFrame([{'Month': 'GRAND TOTAL', 'amount': monthly_totals['amount'].sum()}])
+                monthly_totals_final = pd.concat([monthly_totals, grand_monthly_total], ignore_index=True)
+                monthly_totals_final.to_excel(writer, sheet_name="Monthly Totals", index=False)
+                
+                # Average Monthly Expenses Sheet
+                avg_export_df = avg_monthly_expenses[['category', 'average_per_month']].copy()
+                # Sort by amount descending
+                avg_export_df = avg_export_df.sort_values('average_per_month', ascending=False)
+                avg_export_df.to_excel(writer, sheet_name="Average Monthly Expenses", index=False)
+
+                # Yearly Comparison (Pivot) Sheet
+                # Note: Pivot sheets are complex to sort by "amount" across multiple years, 
+                # but we'll sort categories by their total sum across all years for consistency.
+                pivot_sums = yearly_pivot.select_dtypes(include=['number']).sum(axis=1)
+                yearly_pivot['Total_Sum'] = pivot_sums
+                yearly_pivot_sorted = yearly_pivot.sort_values('Total_Sum', ascending=False).drop(columns=['Total_Sum'])
+                
+                # Add Total row for each year column
+                pivot_totals = yearly_pivot_sorted.select_dtypes(include=['number']).sum()
+                total_pivot_row = pd.DataFrame(pivot_totals).T
+                total_pivot_row['category'] = 'TOTAL'
+                yearly_pivot_final = pd.concat([yearly_pivot_sorted, total_pivot_row], ignore_index=True)
+                yearly_pivot_final.to_excel(writer, sheet_name="Yearly Comparison", index=False)
+                
+                # Yearly Summary Sheet (Grouped by Year, Sort by amount descending within year)
+                yearly_summary_sorted = yearly_summary.sort_values(['Year', 'amount'], ascending=[False, False])
+                # Add overall Total row
+                grand_total_row = pd.DataFrame([{'Year': 'GRAND TOTAL', 'category': '-', 'amount': yearly_summary_sorted['amount'].sum()}])
+                yearly_summary_final = pd.concat([yearly_summary_sorted, grand_total_row], ignore_index=True)
+                yearly_summary_final.to_excel(writer, sheet_name="Yearly Summary", index=False)
+
+            st.download_button(
+                label="📥 Download Yearly Report (Excel)",
+                data=excel_data.getvalue(),
+                file_name=f"expense_report_filtered.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
         
         st.divider()
         

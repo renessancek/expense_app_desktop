@@ -99,7 +99,7 @@ class Parser:
                 desc_str = " - ".join(desc_parts) if desc_parts else "Unknown Transaction"
                 
                 # Exclude internal PayPal/Bitpanda records (Check descriptive fields)
-                exclusions = ["General Currency Conversion", "General Authorization"]
+                exclusions = ["General Currency Conversion", "General Authorization", "User Initiated Withdrawal"]
                 if any(ex in desc_str for ex in exclusions):
                     continue
                 

@@ -65,6 +65,12 @@ python3 --version
    ~/.cache/expense-app-desktop/launcher.log
    ```
    Log rotation is automatic (max ~5 MB per file, keeps 5 backups).
+5. **Rules storage**:
+   Learned mappings and category rules are stored in:
+   ```bash
+   ~/.local/share/expense-app-desktop/rules.json
+   ```
+   Existing project-root `rules.json` is migrated automatically on first run.
 2. **Scan for CSVs**: Place your bank statement CSVs in the monitored directory (defaulting to the project root or as specified in `scanner.py`).
 3. **Upload Manually**: Use the file uploader in the "Transactions" tab to process CSVs directly.
 4. **Categorize**: Review transaction categories and use the dropdowns to train the app for better accuracy.

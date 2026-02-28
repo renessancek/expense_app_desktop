@@ -55,3 +55,9 @@ To watch logs live while launching the app:
 ```bash
 tail -f ~/.cache/expense-app-desktop/launcher.log
 ```
+
+Rules and learned mappings are stored at:
+
+```bash
+~/.local/share/expense-app-desktop/rules.json
+```

@@ -1,10 +1,27 @@
 import json
 import os
+import shutil
 
 class Categorizer:
-    def __init__(self, rules_path='rules.json'):
-        self.rules_path = rules_path
+    def __init__(self, rules_path=None):
+        if rules_path is None:
+            default_dir = os.path.join(os.path.expanduser('~'), '.local', 'share', 'expense-app-desktop')
+            self.rules_path = os.path.join(default_dir, 'rules.json')
+            self._migrate_legacy_rules()
+        else:
+            self.rules_path = rules_path
+
         self.load_rules()
+
+    def _migrate_legacy_rules(self):
+        legacy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rules.json')
+        if os.path.exists(self.rules_path):
+            return
+        if not os.path.exists(legacy_path):
+            return
+
+        os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
+        shutil.copy2(legacy_path, self.rules_path)
 
     def load_rules(self):
         if os.path.exists(self.rules_path):
@@ -17,6 +34,8 @@ class Categorizer:
             self.rules = []
 
     def save_rules(self):
+        os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
+
         # Create backup before saving
         if os.path.exists(self.rules_path):
             import datetime

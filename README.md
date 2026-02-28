@@ -35,8 +35,8 @@ python3 --version
 1. **Clone the repository** (if applicable) or navigate to the project folder.
 2. **Create a virtual environment**:
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
+   python3 -m venv .venv
+   source .venv/bin/activate
    ```
 3. **Install dependencies**:
    ```bash
@@ -45,10 +45,26 @@ python3 --version
 
 ### Usage
 
-1. **Start the application**:
+1. **Start as a normal Ubuntu app (recommended)**:
    ```bash
-   streamlit run app.py
+   chmod +x install_ubuntu_app.sh start_expense_app.sh
+   ./install_ubuntu_app.sh
    ```
+   Then open your app launcher and search for **Expense App Desktop**.
+
+2. **Start directly from terminal**:
+   ```bash
+   ./start_expense_app.sh
+   ```
+
+3. **Stop the app**:
+   Close the app window. This automatically shuts down the background Streamlit server.
+4. **Logs**:
+   Startup/runtime logs are written to:
+   ```bash
+   ~/.cache/expense-app-desktop/launcher.log
+   ```
+   Log rotation is automatic (max ~5 MB per file, keeps 5 backups).
 2. **Scan for CSVs**: Place your bank statement CSVs in the monitored directory (defaulting to the project root or as specified in `scanner.py`).
 3. **Upload Manually**: Use the file uploader in the "Transactions" tab to process CSVs directly.
 4. **Categorize**: Review transaction categories and use the dropdowns to train the app for better accuracy.
@@ -64,7 +80,7 @@ python3 --version
 
 ## 🔧 Ubuntu Startup Setup
 
-To have the app open automatically when you log in to Ubuntu, refer to the [Ubuntu Startup Setup Guide](STARTUP_SETUP.md).
+For startup-on-login instructions, refer to the [Ubuntu Startup Setup Guide](STARTUP_SETUP.md).
 
 ---
 *Created by Antigravity for a seamless expense tracking experience.*

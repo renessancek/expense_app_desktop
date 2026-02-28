@@ -1,41 +1,57 @@
-# Ubuntu Startup Setup Guide
+# Ubuntu App + Startup Setup Guide
 
-To have the Expense App Desktop open automatically when you log in to your Ubuntu machine, follow these steps:
+This project can be installed as a normal Ubuntu app entry so you can open and close it from the Applications menu.
 
-## 1. Create a Startup Script
-Create a file named `start_expense_app.sh` in the project directory:
+## 1) Install dependencies
+
+From the project folder:
 
 ```bash
-#!/bin/bash
-# Automatically identify the project directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR"
-source venv/bin/activate
-streamlit run app.py --server.headless true
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
-Make it executable:
-`chmod +x start_expense_app.sh`
 
-## 2. Add to Startup Applications
-1. Open the **Startup Applications** tool from the Ubuntu application menu.
+## 2) Install the app launcher
+
+```bash
+chmod +x install_ubuntu_app.sh start_expense_app.sh
+./install_ubuntu_app.sh
+```
+
+This creates:
+
+`~/.local/share/applications/expense-app-desktop.desktop`
+
+Now search for **Expense App Desktop** in Ubuntu Apps and launch it like any other app.
+
+## 3) Optional: Start automatically on login
+
+1. Open **Startup Applications**.
 2. Click **Add**.
 3. Name: `Expense App Desktop`
-4. Command: `/path/to/your/project/start_expense_app.sh` (Replace with the absolute path to the script on your machine)
-5. Comment: `Starts the expense app scanner and UI`
-6. Click **Add**.
+4. Command: `/absolute/path/to/your/project/start_expense_app.sh`
+5. Click **Add**.
 
-## Alternative: Using a .desktop file
-You can also create a file at `~/.config/autostart/expense_app.desktop`:
+## 4) Uninstall app launcher
 
-```ini
-[Desktop Entry]
-Type=Application
-Exec=/path/to/your/project/start_expense_app.sh
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-Name[en_US]=Expense App Desktop
-Name=Expense App Desktop
-Comment[en_US]=Starts the expense app scanner and UI
-Comment=Starts the expense app scanner and UI
+```bash
+chmod +x uninstall_ubuntu_app.sh
+./uninstall_ubuntu_app.sh
+```
+
+## 5) Logs and troubleshooting
+
+Launcher and Streamlit runtime logs are written to:
+
+```bash
+~/.cache/expense-app-desktop/launcher.log
+```
+
+Log rotation is automatic (max ~5 MB per file, keeps 5 backups as `launcher.log.1` to `launcher.log.5`).
+
+To watch logs live while launching the app:
+
+```bash
+tail -f ~/.cache/expense-app-desktop/launcher.log
 ```

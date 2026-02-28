@@ -44,20 +44,6 @@ with st.sidebar:
     st.header("Actions")
     if st.button("🔄 Scan for new CSVs"):
         st.rerun()
-    
-    if st.button("🛑 Shutdown App"):
-        st.warning("Shutting down the server. Attempting to close tab...")
-        st.markdown("""
-            <script>
-                setTimeout(function() {
-                    window.close();
-                }, 1000);
-            </script>
-            """, unsafe_allow_html=True)
-        # Use a slight delay to allow the JS to initiate
-        import time
-        time.sleep(1.5)
-        os._exit(0)
 
 # Main content
 tab1, tab2, tab3 = st.tabs(["📊 Transactions", "⚙️ Category Editor", "📈 Statistics"])

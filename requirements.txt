@@ -3,3 +3,4 @@ pdfplumber
 pandas
  watchdog
 plotly
+openpyxl

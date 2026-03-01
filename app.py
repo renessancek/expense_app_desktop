@@ -405,6 +405,37 @@ with tab3:
                 yearly_summary_final = pd.concat([yearly_summary_sorted, grand_total_row], ignore_index=True)
                 yearly_summary_final.to_excel(writer, sheet_name="Yearly Summary", index=False)
 
+                # Configured Categories Sheet
+                category_to_keywords = {}
+
+                for rule in categorizer.rules:
+                    category = rule.get('category')
+                    if not category:
+                        continue
+                    category_to_keywords.setdefault(category, set()).update(
+                        keyword.strip().lower()
+                        for keyword in rule.get('keywords', [])
+                        if isinstance(keyword, str) and keyword.strip()
+                    )
+
+                for keyword, category in categorizer.mappings.items():
+                    if not category:
+                        continue
+                    if not isinstance(keyword, str) or not keyword.strip():
+                        continue
+                    category_to_keywords.setdefault(category, set()).add(keyword.strip().lower())
+
+                configured_categories_df = pd.DataFrame(
+                    [
+                        {
+                            'category': category,
+                            'keywords': ", ".join(sorted(keywords)),
+                        }
+                        for category, keywords in sorted(category_to_keywords.items())
+                    ]
+                )
+                configured_categories_df.to_excel(writer, sheet_name="Configured Categories", index=False)
+
             st.download_button(
                 label="📥 Download Yearly Report (Excel)",
                 data=excel_data.getvalue(),

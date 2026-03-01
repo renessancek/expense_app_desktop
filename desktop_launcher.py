@@ -1,4 +1,6 @@
 import atexit
+import fcntl
+import io
 import os
 import signal
 import shutil
@@ -17,6 +19,9 @@ HOST = "127.0.0.1"
 PORT = 8501
 LOG_DIR = Path.home() / ".cache" / "expense-app-desktop"
 LOG_FILE = LOG_DIR / "launcher.log"
+LOCK_FILE = LOG_DIR / "launcher.lock"
+WINDOW_WIDTH = 1400
+WINDOW_HEIGHT = 900
 LOG_MAX_BYTES = 5 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 BROWSER_CANDIDATES = [
@@ -57,6 +62,33 @@ def _log(message: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with LOG_FILE.open("a", encoding="utf-8") as handle:
         handle.write(f"[{timestamp}] {message}\n")
+
+
+def _acquire_single_instance_lock() -> io.TextIOWrapper | None:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    lock_handle = LOCK_FILE.open("a+", encoding="utf-8")
+
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_handle.close()
+        return None
+
+    lock_handle.seek(0)
+    lock_handle.truncate()
+    lock_handle.write(str(os.getpid()))
+    lock_handle.flush()
+    return lock_handle
+
+
+def _release_single_instance_lock(lock_handle: io.TextIOWrapper | None) -> None:
+    if lock_handle is None:
+        return
+
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        lock_handle.close()
 
 
 def _is_port_open(host: str, port: int) -> bool:
@@ -102,9 +134,20 @@ def _launch_browser_window(url: str) -> subprocess.Popen | None:
             continue
 
         if mode == "chromium_app":
-            args = [resolved, f"--app={url}", "--new-window"]
+            args = [
+                resolved,
+                f"--app={url}",
+                "--new-window",
+                f"--window-size={WINDOW_WIDTH},{WINDOW_HEIGHT}",
+            ]
         else:
-            args = [resolved, "--new-window", url]
+            args = [
+                resolved,
+                "--new-window",
+                f"--width={WINDOW_WIDTH}",
+                f"--height={WINDOW_HEIGHT}",
+                url,
+            ]
 
         try:
             process = subprocess.Popen(
@@ -127,72 +170,83 @@ def main() -> int:
     _rotate_logs_if_needed()
     _log("Launcher started")
 
-    if not APP_FILE.exists():
-        _log(f"Could not find app entry file: {APP_FILE}")
-        return 1
+    lock_handle = _acquire_single_instance_lock()
+    if lock_handle is None:
+        _log("Another launcher instance is already running; exiting")
+        print("Expense App is already running.")
+        return 0
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(APP_FILE),
-        "--server.headless",
-        "true",
-        "--server.address",
-        HOST,
-        "--server.port",
-        str(PORT),
-        "--browser.gatherUsageStats",
-        "false",
-    ]
+    _log("Acquired single-instance lock")
 
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    with LOG_FILE.open("a", encoding="utf-8") as log_handle:
-        log_handle.write(f"\n===== Session {datetime.now().isoformat()} =====\n")
-
-        process = subprocess.Popen(
-            cmd,
-            cwd=str(PROJECT_DIR),
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        _log(f"Started Streamlit process (pid={process.pid})")
-
-        atexit.register(_stop_process, process)
-
-        def _handle_signal(signum, _frame):
-            _log(f"Received signal {signum}; shutting down")
-            _stop_process(process)
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, _handle_signal)
-        signal.signal(signal.SIGTERM, _handle_signal)
-
-        if not _wait_for_server(HOST, PORT, process):
-            exit_code = process.poll()
-            _log(f"Expense App failed to start in time (streamlit_exit={exit_code})")
-            _stop_process(process)
+    try:
+        if not APP_FILE.exists():
+            _log(f"Could not find app entry file: {APP_FILE}")
             return 1
 
-        url = f"http://{HOST}:{PORT}"
-        _log(f"Server is reachable at {url}")
-        browser_process = _launch_browser_window(url)
+        cmd = [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            str(APP_FILE),
+            "--server.headless",
+            "true",
+            "--server.address",
+            HOST,
+            "--server.port",
+            str(PORT),
+            "--browser.gatherUsageStats",
+            "false",
+        ]
 
-        try:
-            if browser_process is None:
-                while process.poll() is None:
-                    time.sleep(1)
-            else:
-                browser_process.wait()
-        finally:
-            _log("Browser window closed; stopping Streamlit")
-            _stop_process(browser_process)
-            _stop_process(process)
-            _log("Launcher exited cleanly")
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with LOG_FILE.open("a", encoding="utf-8") as log_handle:
+            log_handle.write(f"\n===== Session {datetime.now().isoformat()} =====\n")
 
-    return 0
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(PROJECT_DIR),
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            _log(f"Started Streamlit process (pid={process.pid})")
+
+            atexit.register(_stop_process, process)
+
+            def _handle_signal(signum, _frame):
+                _log(f"Received signal {signum}; shutting down")
+                _stop_process(process)
+                sys.exit(0)
+
+            signal.signal(signal.SIGINT, _handle_signal)
+            signal.signal(signal.SIGTERM, _handle_signal)
+
+            if not _wait_for_server(HOST, PORT, process):
+                exit_code = process.poll()
+                _log(f"Expense App failed to start in time (streamlit_exit={exit_code})")
+                _stop_process(process)
+                return 1
+
+            url = f"http://{HOST}:{PORT}"
+            _log(f"Server is reachable at {url}")
+            browser_process = _launch_browser_window(url)
+
+            try:
+                if browser_process is None:
+                    while process.poll() is None:
+                        time.sleep(1)
+                else:
+                    browser_process.wait()
+            finally:
+                _log("Browser window closed; stopping Streamlit")
+                _stop_process(browser_process)
+                _stop_process(process)
+                _log("Launcher exited cleanly")
+
+        return 0
+    finally:
+        _release_single_instance_lock(lock_handle)
 
 
 if __name__ == "__main__":

@@ -286,6 +286,9 @@ with tab3:
         # Session state to manage multiselect
         if 'stats_filter' not in st.session_state:
             st.session_state.stats_filter = available_stats_cats
+
+        def _select_all_stats_categories():
+            st.session_state.stats_filter = available_stats_cats
             
         col_f1, col_f2 = st.columns([3, 1])
         with col_f1:
@@ -296,9 +299,7 @@ with tab3:
             )
         with col_f2:
             st.write(" ") # Visual alignment
-            if st.button("✅ Select All"):
-                st.session_state.stats_filter = available_stats_cats
-                st.rerun()
+            st.button("✅ Select All", on_click=_select_all_stats_categories)
         
         # Filter the data
         df_stats = df_stats[df_stats['category'].isin(selected_stats_cats)]

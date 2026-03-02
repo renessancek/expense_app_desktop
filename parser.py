@@ -90,7 +90,7 @@ class Parser:
                 # If 'Name' (mapped to Description) and 'Item Title' both exist, we want both.
                 # In current col_map, 'Description' takes the first match. Let's be explicit:
                 
-                for col in ['Name', 'Item Title', 'Type', 'Buchungstext', 'Verwendungszweck']:
+                for col in ['Description', 'Name', 'Item Title', 'Type', 'Buchungstext', 'Verwendungszweck']:
                     if col in df.columns and not pd.isna(row[col]):
                         val = str(row[col]).strip()
                         if val and val.lower() != 'nan' and val not in desc_parts:

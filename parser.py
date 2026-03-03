@@ -2,6 +2,7 @@ import pandas as pd
 import uuid
 import os
 import io
+import hashlib
 
 class Parser:
     @staticmethod
@@ -63,15 +64,27 @@ class Parser:
             print(f"Missing essential columns in CSV. Found: {list(df.columns)}")
             return []
 
+        # Pre-calculate column indices for faster access with itertuples
+        amount_col = final_cols['Amount']
+        date_col = final_cols['Date']
+        txid_col = final_cols.get('TxID')
+
+        amount_idx = df.columns.get_loc(amount_col)
+        date_idx = df.columns.get_loc(date_col)
+        txid_idx = df.columns.get_loc(txid_col) if txid_col else None
+
+        # Description extraction indices
+        potential_desc_cols = ['Description', 'Name', 'Item Title', 'Type', 'Buchungstext', 'Verwendungszweck']
+        desc_col_indices = [df.columns.get_loc(col) for col in potential_desc_cols if col in df.columns]
+
         transactions = []
-        import hashlib
-        for _, row in df.iterrows():
+        for row in df.itertuples(index=False, name=None):
             try:
-                # Handle empty/NaN values
-                if pd.isna(row[final_cols['Amount']]) or pd.isna(row[final_cols['Date']]):
+                # Handle empty/NaN values using pre-calculated indices
+                if pd.isna(row[amount_idx]) or pd.isna(row[date_idx]):
                     continue
 
-                amount_val = row[final_cols['Amount']]
+                amount_val = row[amount_idx]
                 if isinstance(amount_val, str):
                     # Handle formats like -100,00 or 1.234,56
                     amount_str = amount_val.replace('.', '').replace(',', '.')
@@ -79,20 +92,17 @@ class Parser:
                 else:
                     amount = float(amount_val)
                 
-                date_str = str(row[final_cols['Date']])
+                date_str = str(row[date_idx])
                 
                 # Robust Description Extraction
                 # Combine all descriptive fields that exist and are not empty
                 desc_parts = []
-                potential_desc_keys = ['Description', 'Type'] # Description maps to Name/Item Title mapped in col_map
                 
-                # Re-map specifically for PayPal's multi-column descriptions
-                # If 'Name' (mapped to Description) and 'Item Title' both exist, we want both.
-                # In current col_map, 'Description' takes the first match. Let's be explicit:
-                
-                for col in ['Description', 'Name', 'Item Title', 'Type', 'Buchungstext', 'Verwendungszweck']:
-                    if col in df.columns and not pd.isna(row[col]):
-                        val = str(row[col]).strip()
+                # Use pre-calculated description column indices
+                for idx in desc_col_indices:
+                    val_raw = row[idx]
+                    if not pd.isna(val_raw):
+                        val = str(val_raw).strip()
                         if val and val.lower() != 'nan' and val not in desc_parts:
                             desc_parts.append(val)
                 
@@ -104,7 +114,7 @@ class Parser:
                     continue
                 
                 # Use provided Transaction ID if available, otherwise hash details
-                tx_unique_id = str(row[final_cols['TxID']]) if 'TxID' in final_cols and not pd.isna(row[final_cols['TxID']]) else None
+                tx_unique_id = str(row[txid_idx]) if txid_idx is not None and not pd.isna(row[txid_idx]) else None
                 
                 if tx_unique_id:
                     hash_input = tx_unique_id.encode('utf-8')

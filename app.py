@@ -155,34 +155,43 @@ if uploaded_files:
             all_cats.remove("Sonstiges")
         categories = sorted(all_cats) + ["Sonstiges", "Custom..."]
 
-        for i, row in display_df.iterrows():
-            with st.expander(f"{row['date'].strftime('%Y-%m-%d')} - {row['description'][:50]}... ({row['amount']:.2f} €)", expanded=True):
+        # Cache column indices for faster access
+        date_idx = display_df.columns.get_loc('date')
+        desc_idx = display_df.columns.get_loc('description')
+        amount_idx = display_df.columns.get_loc('amount')
+        source_idx = display_df.columns.get_loc('source')
+        file_idx = display_df.columns.get_loc('file')
+        category_idx = display_df.columns.get_loc('category')
+        id_idx = display_df.columns.get_loc('id')
+
+        for i, row in enumerate(display_df.itertuples(index=False, name=None)):
+            with st.expander(f"{row[date_idx].strftime('%Y-%m-%d')} - {row[desc_idx][:50]}... ({row[amount_idx]:.2f} €)", expanded=True):
                 col_left, col_right = st.columns([2, 1])
                 
                 with col_left:
-                    st.write(f"**Full Description:** {row['description']}")
-                    st.write(f"**Source:** {row['source']} ({row['file']})")
+                    st.write(f"**Full Description:** {row[desc_idx]}")
+                    st.write(f"**Source:** {row[source_idx]} ({row[file_idx]})")
                 
                 with col_right:
-                    current_cat = row['category']
+                    current_cat = row[category_idx]
                     index = categories.index(current_cat) if current_cat in categories else categories.index("Sonstiges")
                     
                     new_cat = st.selectbox(
                         "Category",
                         options=categories,
                         index=index,
-                        key=f"cat_{row['id']}_{i}"
+                        key=f"cat_{row[id_idx]}_{i}"
                     )
                     
                     if new_cat == "Custom...":
-                        custom_cat = st.text_input("Enter custom category", key=f"custom_{row['id']}_{i}")
-                        if st.button("Apply Custom", key=f"btn_custom_{row['id']}_{i}"):
-                            keyword = categorizer.extract_keyword(row['description'])
+                        custom_cat = st.text_input("Enter custom category", key=f"custom_{row[id_idx]}_{i}")
+                        if st.button("Apply Custom", key=f"btn_custom_{row[id_idx]}_{i}"):
+                            keyword = categorizer.extract_keyword(row[desc_idx])
                             categorizer.add_mapping(keyword, custom_cat)
                             st.success(f"Added mapping: {keyword} -> {custom_cat}")
                             st.rerun()
                     elif new_cat != current_cat:
-                        keyword = categorizer.extract_keyword(row['description'])
+                        keyword = categorizer.extract_keyword(row[desc_idx])
                         categorizer.add_mapping(keyword, new_cat)
                         st.success(f"Updated category for '{keyword}' to {new_cat}")
                         st.rerun()

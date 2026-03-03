@@ -2,6 +2,7 @@ import pandas as pd
 import hashlib
 import os
 import io
+import hashlib
 
 class Parser:
     @staticmethod
@@ -110,7 +111,7 @@ class Parser:
                 else:
                     hash_input = f"{date_str}{desc_str}{amount}".encode('utf-8')
                 
-                tx_id = hashlib.md5(hash_input).hexdigest()[:10]
+                tx_id = hashlib.sha256(hash_input).hexdigest()[:10]
                 
                 transactions.append({
                     'id': tx_id,

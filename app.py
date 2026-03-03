@@ -83,7 +83,7 @@ def get_categorized_transactions(raw_transactions, rules_mtime):
 
 # Get cache invalidation keys
 scanned_csvs = scanner.scan_for_csvs()
-files_hash = hashlib.md5("".join(sorted(scanned_csvs)).encode()).hexdigest()
+files_hash = hashlib.sha256("".join(sorted(scanned_csvs)).encode()).hexdigest()
 rules_mtime = os.path.getmtime(categorizer.rules_path) if os.path.exists(categorizer.rules_path) else 0
 
 # Process Data

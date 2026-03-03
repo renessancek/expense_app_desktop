@@ -1,24 +1,30 @@
 import unittest
+import os
+import tempfile
+import shutil
 from categorizer import Categorizer
 
 class TestCategorizer(unittest.TestCase):
     def setUp(self):
-        self.categorizer = Categorizer(rules_path="test_rules.json")
+        self.test_dir = tempfile.mkdtemp()
+        self.rules_path = os.path.join(self.test_dir, "rules.json")
+        self.categorizer = Categorizer(rules_path=self.rules_path)
 
-    def test_extract_keyword_normal(self):
-        self.assertEqual(self.categorizer.extract_keyword("REWE SAGT DANKE"), "rewe sagt")
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
 
-    def test_extract_keyword_single_word(self):
-        self.assertEqual(self.categorizer.extract_keyword("AMAZON"), "amazon")
+    def test_extract_keyword(self):
+        test_cases = [
+            ("REWE SAGT DANKE", "rewe sagt", "normal description"),
+            ("AMAZON", "amazon", "single word"),
+            ("", "", "empty string"),
+            ("  APPLE   STORE  ", "apple store", "extra spaces"),
+            ("NETTO MARKEN-DISCOUNT NUERNBERG", "netto marken-discount", "more than two words"),
+        ]
 
-    def test_extract_keyword_empty(self):
-        self.assertEqual(self.categorizer.extract_keyword(""), "")
-
-    def test_extract_keyword_extra_spaces(self):
-        self.assertEqual(self.categorizer.extract_keyword("  APPLE   STORE  "), "apple store")
-
-    def test_extract_keyword_more_than_two_words(self):
-        self.assertEqual(self.categorizer.extract_keyword("NETTO MARKEN-DISCOUNT NUERNBERG"), "netto marken-discount")
+        for description, expected, msg in test_cases:
+            with self.subTest(msg=msg, description=description):
+                self.assertEqual(self.categorizer.extract_keyword(description), expected)
 
 if __name__ == "__main__":
     unittest.main()

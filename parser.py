@@ -1,5 +1,5 @@
 import pandas as pd
-import uuid
+import hashlib
 import os
 import io
 
@@ -64,7 +64,6 @@ class Parser:
             return []
 
         transactions = []
-        import hashlib
         for _, row in df.iterrows():
             try:
                 # Handle empty/NaN values

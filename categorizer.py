@@ -1,5 +1,7 @@
+import datetime
 import json
 import os
+import re
 import shutil
 
 class Categorizer:
@@ -38,14 +40,12 @@ class Categorizer:
 
         # Create backup before saving
         if os.path.exists(self.rules_path):
-            import datetime
             backup_dir = os.path.join(os.path.dirname(os.path.abspath(self.rules_path)), 'backups')
             os.makedirs(backup_dir, exist_ok=True)
             
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(backup_dir, f"rules_backup_{timestamp}.json")
             
-            import shutil
             shutil.copy2(self.rules_path, backup_path)
             
             # Keep only the last 10 backups to save space
@@ -62,7 +62,6 @@ class Categorizer:
             json.dump(data, f, indent=4)
 
     def suggest_category(self, description):
-        import re
         desc = description.lower()
 
         # 1. First priority: Manual/Global Rules
@@ -152,7 +151,6 @@ class Categorizer:
             return False, "No backups found."
             
         latest_backup = backups[-1]
-        import shutil
         shutil.copy2(latest_backup, self.rules_path)
         self.load_rules()
         return True, f"Restored from {os.path.basename(latest_backup)}"

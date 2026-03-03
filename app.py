@@ -3,6 +3,8 @@ import pandas as pd
 import os
 import plotly.express as px
 import hashlib
+import copy
+import io
 from scanner import Scanner
 from parser import Parser
 from categorizer import Categorizer
@@ -75,7 +77,6 @@ def get_categorized_transactions(raw_transactions, rules_mtime):
     Applies categorization rules to raw transactions.
     Invalidates if rules change or raw data changes.
     """
-    import copy
     categorized_tx = copy.deepcopy(raw_transactions)
     for tx in categorized_tx:
         tx['category'] = categorizer.suggest_category(tx['description'])
@@ -83,7 +84,7 @@ def get_categorized_transactions(raw_transactions, rules_mtime):
 
 # Get cache invalidation keys
 scanned_csvs = scanner.scan_for_csvs()
-files_hash = hashlib.md5("".join(sorted(scanned_csvs)).encode()).hexdigest()
+files_hash = hashlib.sha256("".join(sorted(scanned_csvs)).encode()).hexdigest()
 rules_mtime = os.path.getmtime(categorizer.rules_path) if os.path.exists(categorizer.rules_path) else 0
 
 # Process Data
@@ -356,7 +357,6 @@ with tab3:
                 st.info("No expense data to display in pie chart.")
             
             # Prepare Excel Export (Multi-sheet)
-            import io
             excel_data = io.BytesIO()
             with pd.ExcelWriter(excel_data, engine='openpyxl') as writer:
                 # Monthly sheets

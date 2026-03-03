@@ -1,8 +1,5 @@
 import pandas as pd
 import hashlib
-import os
-import io
-import hashlib
 
 class Parser:
     @staticmethod

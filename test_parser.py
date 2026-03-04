@@ -1,11 +1,5 @@
 import unittest
-import sys
-import hashlib
-from unittest.mock import MagicMock
-
-# Mock pandas before importing parser
-sys.modules['pandas'] = MagicMock()
-import pandas as pd
+from unittest.mock import MagicMock, patch
 from parser import Parser
 
 class TestParser(unittest.TestCase):
@@ -13,25 +7,27 @@ class TestParser(unittest.TestCase):
     def setUp(self):
         self.parser = Parser()
 
-    def test_parse_bank_statement_failed_load(self):
+    @patch('parser.pd')
+    def test_parse_bank_statement_failed_load(self, mock_pd):
         # Mock read_csv to always raise Exception
-        pd.read_csv.side_effect = Exception("Failed")
+        mock_pd.read_csv.side_effect = Exception("Failed")
         file_input = MagicMock()
 
         result = self.parser.parse_bank_statement(file_input)
         self.assertEqual(result, [])
 
-    def test_parse_bank_statement_missing_columns(self):
+    @patch('parser.pd')
+    def test_parse_bank_statement_missing_columns(self, mock_pd):
         mock_df = MagicMock()
         mock_df.columns = ['Unknown1', 'Unknown2']
-        pd.read_csv.return_value = mock_df
-        pd.read_csv.side_effect = None
+        mock_pd.read_csv.return_value = mock_df
 
         file_input = MagicMock()
         result = self.parser.parse_bank_statement(file_input)
         self.assertEqual(result, [])
 
-    def test_parse_bank_statement_success(self):
+    @patch('parser.pd')
+    def test_parse_bank_statement_success(self, mock_pd):
         mock_df = MagicMock()
         # Ensure it passes the amount column check in the heuristic
         mock_columns = MagicMock()
@@ -58,10 +54,9 @@ class TestParser(unittest.TestCase):
             if isinstance(val, float) and str(val) == 'nan':
                 return True
             return False
-        pd.isna.side_effect = mock_isna
+        mock_pd.isna.side_effect = mock_isna
 
-        pd.read_csv.return_value = mock_df
-        pd.read_csv.side_effect = None
+        mock_pd.read_csv.return_value = mock_df
 
         file_input = MagicMock()
         result = self.parser.parse_bank_statement(file_input)

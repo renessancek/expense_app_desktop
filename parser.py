@@ -8,25 +8,31 @@ class Parser:
         Parses a bank statement from a CSV file.
         Supports various separators, encodings, and regional column names.
         """
-        df = None
-        
-        # Possible separators and encodings
+        df = Parser._load_csv(file_input)
+        if df is None:
+            return []
+
+        final_cols = Parser._map_columns(df)
+        if not final_cols:
+            return []
+
+        return Parser._extract_transactions(df, final_cols)
+
+    @staticmethod
+    def _load_csv(file_input):
         separators = [';', ',']
         encodings = ['utf-8', 'latin-1', 'cp1252']
-        
-        # Try different combinations of separator and encoding
+        possible_amount_cols = ['Amount', 'Betrag', 'amount', 'Wert']
+        df = None
+
         for sep in separators:
             for enc in encodings:
                 try:
-                    # Handle Streamlit UploadedFile (has seek) or file path
                     if hasattr(file_input, 'seek'):
                         file_input.seek(0)
                         
                     df = pd.read_csv(file_input, sep=sep, encoding=enc)
                     
-                    # Heuristic to check if we found the right separator
-                    # Check for amount or common German variants
-                    possible_amount_cols = ['Amount', 'Betrag', 'amount', 'Wert']
                     if any(col in df.columns for col in possible_amount_cols):
                         print(f"Successfully loaded CSV with separator='{sep}' and encoding='{enc}'")
                         break
@@ -37,9 +43,11 @@ class Parser:
         
         if df is None:
             print("Failed to parse CSV with standard separators and encodings.")
-            return []
+            return None
+        return df
 
-        # Map common column names (Prioritizing specific regional headers)
+    @staticmethod
+    def _map_columns(df):
         col_map = {
             'Date': ['Buchungsdatum', 'Datum', 'Date'],
             'Description': ['Buchungstext', 'Verwendungszweck', 'Description', 'Name', 'Item Title'],
@@ -55,35 +63,30 @@ class Parser:
                     final_cols[target] = opt
                     break
         
-        # Require at least Date, Description, and Amount
         required = ['Date', 'Description', 'Amount']
         if not all(k in final_cols for k in required):
             print(f"Missing essential columns in CSV. Found: {list(df.columns)}")
-            return []
+            return None
+        return final_cols
 
-        # Pre-calculate column indices for faster access with itertuples
-        amount_col = final_cols['Amount']
-        date_col = final_cols['Date']
+    @staticmethod
+    def _extract_transactions(df, final_cols):
+        amount_idx = df.columns.get_loc(final_cols['Amount'])
+        date_idx = df.columns.get_loc(final_cols['Date'])
         txid_col = final_cols.get('TxID')
-
-        amount_idx = df.columns.get_loc(amount_col)
-        date_idx = df.columns.get_loc(date_col)
         txid_idx = df.columns.get_loc(txid_col) if txid_col else None
 
-        # Description extraction indices
         potential_desc_cols = ['Description', 'Name', 'Item Title', 'Type', 'Buchungstext', 'Verwendungszweck']
         desc_col_indices = [df.columns.get_loc(col) for col in potential_desc_cols if col in df.columns]
 
         transactions = []
         for row in df.itertuples(index=False, name=None):
             try:
-                # Handle empty/NaN values using pre-calculated indices
                 if pd.isna(row[amount_idx]) or pd.isna(row[date_idx]):
                     continue
 
                 amount_val = row[amount_idx]
                 if isinstance(amount_val, str):
-                    # Handle formats like -100,00 or 1.234,56
                     amount_str = amount_val.replace('.', '').replace(',', '.')
                     amount = float(amount_str)
                 else:
@@ -91,11 +94,7 @@ class Parser:
                 
                 date_str = str(row[date_idx])
                 
-                # Robust Description Extraction
-                # Combine all descriptive fields that exist and are not empty
                 desc_parts = []
-                
-                # Use pre-calculated description column indices
                 for idx in desc_col_indices:
                     val_raw = row[idx]
                     if not pd.isna(val_raw):
@@ -105,12 +104,10 @@ class Parser:
                 
                 desc_str = " - ".join(desc_parts) if desc_parts else "Unknown Transaction"
                 
-                # Exclude internal PayPal/Bitpanda records (Check descriptive fields)
                 exclusions = ["General Currency Conversion", "General Authorization", "User Initiated Withdrawal"]
                 if any(ex in desc_str for ex in exclusions):
                     continue
                 
-                # Use provided Transaction ID if available, otherwise hash details
                 tx_unique_id = str(row[txid_idx]) if txid_idx is not None and not pd.isna(row[txid_idx]) else None
                 
                 if tx_unique_id:

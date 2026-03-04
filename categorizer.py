@@ -38,25 +38,17 @@ class Categorizer:
         self._compile_regexes()
 
     def _compile_regexes(self):
-        """Pre-compiles regular expressions for all keywords and mappings to improve performance."""
-        # Pre-compile for rules
         self._compiled_rules = []
         for rule in self.rules:
-            compiled_keywords = []
-            for keyword in rule['keywords']:
-                pattern = rf'\b{re.escape(keyword.lower())}\b'
-                compiled_keywords.append((keyword, re.compile(pattern)))
+            compiled_keywords = [re.compile(rf'\b{re.escape(k.lower())}\b') for k in rule['keywords']]
             self._compiled_rules.append({
                 'category': rule['category'],
-                'keywords': rule['keywords'],
                 'compiled_keywords': compiled_keywords
             })
 
-        # Pre-compile for mappings
         self._compiled_mappings = []
         for keyword, category in self.mappings.items():
-            pattern = rf'\b{re.escape(keyword.lower())}\b'
-            self._compiled_mappings.append((re.compile(pattern), category))
+            self._compiled_mappings.append((re.compile(rf'\b{re.escape(keyword.lower())}\b'), category))
 
     def save_rules(self):
         os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
@@ -84,16 +76,18 @@ class Categorizer:
         with open(self.rules_path, 'w') as f:
             json.dump(data, f, indent=4)
 
+    def _persist_rules(self):
+        self.save_rules()
         self._compile_regexes()
 
     def suggest_category(self, description):
         desc = description.lower()
 
         # 1. First priority: Manual/Global Rules
-        for compiled_rule in self._compiled_rules:
-            for _, pattern in compiled_rule['compiled_keywords']:
+        for rule in self._compiled_rules:
+            for pattern in rule['compiled_keywords']:
                 if pattern.search(desc):
-                    return compiled_rule['category']
+                    return rule['category']
 
         # 2. Second priority: Learned Mappings
         for pattern, category in self._compiled_mappings:
@@ -104,27 +98,28 @@ class Categorizer:
 
     def add_mapping(self, keyword, category):
         self.mappings[keyword.lower()] = category
-        self.save_rules()
+        self._persist_rules()
 
     def delete_mapping(self, keyword):
-        if keyword in self.mappings:
-            del self.mappings[keyword]
-            self.save_rules()
+        normalized_keyword = keyword.lower().strip()
+        if normalized_keyword in self.mappings:
+            del self.mappings[normalized_keyword]
+            self._persist_rules()
 
     def add_rule(self, keywords, category):
         # Check if rule with this category already exists and append keywords
         for rule in self.rules:
             if rule['category'] == category:
                 rule['keywords'] = list(set(rule['keywords'] + keywords))
-                self.save_rules()
+                self._persist_rules()
                 return
         
         self.rules.append({"keywords": keywords, "category": category})
-        self.save_rules()
+        self._persist_rules()
 
     def delete_rule(self, category):
         self.rules = [r for r in self.rules if r['category'] != category]
-        self.save_rules()
+        self._persist_rules()
 
     def get_all_categories(self):
         # Unique set of categories from rules and mappings
@@ -141,7 +136,7 @@ class Categorizer:
         for rule in self.rules:
             if rule['category'] == category:
                 rule['keywords'] = [k.strip().lower() for k in keywords]
-                self.save_rules()
+                self._persist_rules()
                 return True
         return False
 
@@ -160,7 +155,7 @@ class Categorizer:
             if rule['category'] == old_name:
                 rule['category'] = new_name
                 
-        self.save_rules()
+        self._persist_rules()
         return True
 
     def restore_latest_backup(self):

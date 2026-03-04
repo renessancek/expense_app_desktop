@@ -23,28 +23,23 @@ class Parser:
         separators = [';', ',']
         encodings = ['utf-8', 'latin-1', 'cp1252']
         possible_amount_cols = ['Amount', 'Betrag', 'amount', 'Wert']
-        df = None
 
         for sep in separators:
             for enc in encodings:
                 try:
                     if hasattr(file_input, 'seek'):
                         file_input.seek(0)
-                        
+
                     df = pd.read_csv(file_input, sep=sep, encoding=enc)
-                    
+
                     if any(col in df.columns for col in possible_amount_cols):
                         print(f"Successfully loaded CSV with separator='{sep}' and encoding='{enc}'")
-                        break
+                        return df
                 except Exception:
                     continue
-            if df is not None and any(col in df.columns for col in possible_amount_cols):
-                break
-        
-        if df is None:
-            print("Failed to parse CSV with standard separators and encodings.")
-            return None
-        return df
+
+        print("Failed to parse CSV with standard separators and encodings.")
+        return None
 
     @staticmethod
     def _map_columns(df):

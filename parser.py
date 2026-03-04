@@ -65,6 +65,51 @@ class Parser:
         return final_cols
 
     @staticmethod
+    def _parse_amount(val):
+        """Robustly parses an amount from a string or number."""
+        if pd.isna(val):
+            return 0.0
+        
+        if not isinstance(val, str):
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return 0.0
+                
+        # Clean string
+        s = val.strip()
+        if not s:
+            return 0.0
+            
+        # Handle cases with both dot and comma (e.g., 1.234,56 or 1,234.56)
+        if '.' in s and ',' in s:
+            if s.rfind('.') > s.rfind(','):
+                # Dot is after comma -> US format 1,234.56
+                s = s.replace(',', '')
+            else:
+                # Comma is after dot -> EU format 1.234,56
+                s = s.replace('.', '').replace(',', '.')
+        else:
+            # Only one type of separator or none
+            # If it's a comma and there are 2 digits after it, it's likely decimal
+            if ',' in s:
+                parts = s.split(',')
+                if len(parts) == 2 and len(parts[1]) == 2:
+                    s = s.replace(',', '.')
+                else:
+                    # Treat as thousands separator (e.g., 1,234)
+                    # This is risky, but common in some formats
+                    # Better heuristic: if there's only one comma, check its position
+                    s = s.replace(',', '')
+        
+        try:
+            # Final attempt: remove any remaining non-numeric chars except . and -
+            s = "".join(c for c in s if c.isdigit() or c in '.-')
+            return float(s)
+        except (ValueError, TypeError):
+            return 0.0
+
+    @staticmethod
     def _extract_transactions(df, final_cols):
         amount_idx = df.columns.get_loc(final_cols['Amount'])
         date_idx = df.columns.get_loc(final_cols['Date'])
@@ -80,12 +125,7 @@ class Parser:
                 if pd.isna(row[amount_idx]) or pd.isna(row[date_idx]):
                     continue
 
-                amount_val = row[amount_idx]
-                if isinstance(amount_val, str):
-                    amount_str = amount_val.replace('.', '').replace(',', '.')
-                    amount = float(amount_str)
-                else:
-                    amount = float(amount_val)
+                amount = Parser._parse_amount(row[amount_idx])
                 
                 date_str = str(row[date_idx])
                 

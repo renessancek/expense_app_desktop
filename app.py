@@ -164,7 +164,7 @@ if uploaded_files:
                             categorizer.add_mapping(keyword, custom_cat)
                             st.success(f"Added mapping: {keyword} -> {custom_cat}")
                             st.rerun()
-                    elif new_cat != current_cat:
+                    elif new_cat != current_cat and new_cat != "Custom...":
                         keyword = categorizer.extract_keyword(row[desc_idx])
                         categorizer.add_mapping(keyword, new_cat)
                         st.success(f"Updated category for '{keyword}' to {new_cat}")

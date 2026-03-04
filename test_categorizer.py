@@ -100,5 +100,38 @@ class TestCategorizer(unittest.TestCase):
         self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Sonstiges")
         self.assertEqual(self.categorizer.suggest_category("ALDI SUED"), "Supermarkt")
 
+    def test_rename_category(self):
+        """rename_category updates both rules and mappings."""
+        self.categorizer.add_rule(["rewe"], "Supermarkt")
+        self.categorizer.add_mapping("amazon", "Shopping")
+        
+        self.categorizer.rename_category("Supermarkt", "Grocery")
+        self.categorizer.rename_category("Shopping", "Online")
+        
+        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Grocery")
+        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Online")
+
+    def test_restore_latest_backup(self):
+        """restore_latest_backup reverts to previous state."""
+        self.categorizer.add_mapping("amazon", "Shopping")
+        # save_rules creates a backup
+        self.categorizer.add_mapping("rewe", "Supermarkt")
+        
+        # Now change it
+        self.categorizer.add_mapping("amazon", "NewCategory")
+        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "NewCategory")
+        
+        # Restore
+        success, msg = self.categorizer.restore_latest_backup()
+        self.assertTrue(success)
+        # It should restore to the state before "NewCategory" change
+        # Actually, every _persist_rules calls save_rules which creates a backup of the OLD file
+        # 1. add_mapping("amazon", "Shopping") -> saves {"amazon": "Shopping"}, backup: None
+        # 2. add_mapping("rewe", "Supermarkt") -> saves {"amazon": "Shopping", "rewe": "Supermarkt"}, backup: {"amazon": "Shopping"}
+        # 3. add_mapping("amazon", "NewCategory") -> saves ..., backup: {"amazon": "Shopping", "rewe": "Supermarkt"}
+        
+        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Shopping")
+        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Supermarkt")
+
 if __name__ == "__main__":
     unittest.main()

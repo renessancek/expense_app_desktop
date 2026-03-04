@@ -76,7 +76,25 @@ class TestParser(unittest.TestCase):
         tx4 = result[2]
         self.assertEqual(tx4['date'], '2023-01-04')
         self.assertEqual(tx4['description'], 'Unknown Transaction')
-        self.assertEqual(tx4['amount'], 1000.0)
+        self.assertEqual(tx4['amount'], 100.0)
+
+    def test_parse_amount(self):
+        test_cases = [
+            ("1.234,56", 1234.56),
+            ("1,234.56", 1234.56),
+            ("1234,56", 1234.56),
+            ("1234.56", 1234.56),
+            ("1,234", 1234.0),
+            ("123,45", 123.45),
+            ("-1.234,56", -1234.56),
+            ("  10.0  ", 10.0),
+            (100, 100.0),
+            (float('nan'), 0.0),
+            ("", 0.0),
+        ]
+        for val, expected in test_cases:
+            with self.subTest(val=val):
+                self.assertEqual(self.parser._parse_amount(val), expected)
 
 if __name__ == '__main__':
     unittest.main()

@@ -38,24 +38,17 @@ class Categorizer:
         self._compile_regexes()
 
     def _compile_regexes(self):
-        """Pre-compiles regular expressions for all keywords and mappings to improve performance."""
-        # Pre-compile for rules
         self._compiled_rules = []
         for rule in self.rules:
-            compiled_keywords = []
-            for keyword in rule['keywords']:
-                pattern = rf'\b{re.escape(keyword.lower())}\b'
-                compiled_keywords.append(re.compile(pattern))
+            compiled_keywords = [re.compile(rf'\b{re.escape(k.lower())}\b') for k in rule['keywords']]
             self._compiled_rules.append({
                 'category': rule['category'],
                 'compiled_keywords': compiled_keywords
             })
 
-        # Pre-compile for mappings
         self._compiled_mappings = []
         for keyword, category in self.mappings.items():
-            pattern = rf'\b{re.escape(keyword.lower())}\b'
-            self._compiled_mappings.append((re.compile(pattern), category))
+            self._compiled_mappings.append((re.compile(rf'\b{re.escape(keyword.lower())}\b'), category))
 
 
     def save_rules(self):

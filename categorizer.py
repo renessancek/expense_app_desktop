@@ -77,6 +77,8 @@ class Categorizer:
         with open(self.rules_path, 'w') as f:
             json.dump(data, f, indent=4)
 
+    def _persist_rules(self):
+        self.save_rules()
         self._compile_regexes()
 
     def _persist_rules(self):
@@ -89,7 +91,7 @@ class Categorizer:
         for compiled_rule in self._compiled_rules:
             for pattern in compiled_rule['compiled_keywords']:
                 if pattern.search(desc):
-                    return compiled_rule['category']
+                    return rule['category']
 
 
         # 2. Second priority: Learned Mappings

@@ -35,6 +35,21 @@ class Categorizer:
             self.mappings = {}
             self.rules = []
 
+        self._compile_regexes()
+
+    def _compile_regexes(self):
+        self._compiled_rules = []
+        for rule in self.rules:
+            compiled_keywords = [re.compile(rf'\b{re.escape(k.lower())}\b') for k in rule['keywords']]
+            self._compiled_rules.append({
+                'category': rule['category'],
+                'compiled_keywords': compiled_keywords
+            })
+
+        self._compiled_mappings = []
+        for keyword, category in self.mappings.items():
+            self._compiled_mappings.append((re.compile(rf'\b{re.escape(keyword.lower())}\b'), category))
+
     def save_rules(self):
         os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
 
@@ -65,16 +80,14 @@ class Categorizer:
         desc = description.lower()
 
         # 1. First priority: Manual/Global Rules
-        for rule in self.rules:
-            for keyword in rule['keywords']:
-                pattern = rf'\b{re.escape(keyword.lower())}\b'
-                if re.search(pattern, desc):
+        for rule in self._compiled_rules:
+            for pattern in rule['compiled_keywords']:
+                if pattern.search(desc):
                     return rule['category']
 
         # 2. Second priority: Learned Mappings
-        for keyword, category in self.mappings.items():
-            pattern = rf'\b{re.escape(keyword.lower())}\b'
-            if re.search(pattern, desc):
+        for pattern, category in self._compiled_mappings:
+            if pattern.search(desc):
                 return category
 
         return 'Sonstiges'
@@ -82,11 +95,13 @@ class Categorizer:
     def add_mapping(self, keyword, category):
         self.mappings[keyword.lower()] = category
         self.save_rules()
+        self._compile_regexes()
 
     def delete_mapping(self, keyword):
         if keyword in self.mappings:
             del self.mappings[keyword]
             self.save_rules()
+            self._compile_regexes()
 
     def add_rule(self, keywords, category):
         # Check if rule with this category already exists and append keywords
@@ -94,14 +109,17 @@ class Categorizer:
             if rule['category'] == category:
                 rule['keywords'] = list(set(rule['keywords'] + keywords))
                 self.save_rules()
+                self._compile_regexes()
                 return
         
         self.rules.append({"keywords": keywords, "category": category})
         self.save_rules()
+        self._compile_regexes()
 
     def delete_rule(self, category):
         self.rules = [r for r in self.rules if r['category'] != category]
         self.save_rules()
+        self._compile_regexes()
 
     def get_all_categories(self):
         # Unique set of categories from rules and mappings
@@ -119,6 +137,7 @@ class Categorizer:
             if rule['category'] == category:
                 rule['keywords'] = [k.strip().lower() for k in keywords]
                 self.save_rules()
+                self._compile_regexes()
                 return True
         return False
 
@@ -138,6 +157,7 @@ class Categorizer:
                 rule['category'] = new_name
                 
         self.save_rules()
+        self._compile_regexes()
         return True
 
     def restore_latest_backup(self):

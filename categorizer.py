@@ -83,14 +83,13 @@ class Categorizer:
 
     def _persist_rules(self):
         self.save_rules()
-        self._compile_regexes()
 
     def suggest_category(self, description):
         desc = description.lower()
 
         # 1. First priority: Manual/Global Rules
-        for rule in self._compiled_rules:
-            for pattern in rule['compiled_keywords']:
+        for compiled_rule in self._compiled_rules:
+            for pattern in compiled_rule['compiled_keywords']:
                 if pattern.search(desc):
                     return rule['category']
 

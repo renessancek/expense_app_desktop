@@ -45,10 +45,9 @@ class Categorizer:
             compiled_keywords = []
             for keyword in rule['keywords']:
                 pattern = rf'\b{re.escape(keyword.lower())}\b'
-                compiled_keywords.append((keyword, re.compile(pattern)))
+                compiled_keywords.append(re.compile(pattern))
             self._compiled_rules.append({
                 'category': rule['category'],
-                'keywords': rule['keywords'],
                 'compiled_keywords': compiled_keywords
             })
 
@@ -91,7 +90,7 @@ class Categorizer:
 
         # 1. First priority: Manual/Global Rules
         for compiled_rule in self._compiled_rules:
-            for _, pattern in compiled_rule['compiled_keywords']:
+            for pattern in compiled_rule['compiled_keywords']:
                 if pattern.search(desc):
                     return compiled_rule['category']
 

@@ -5,6 +5,7 @@ import plotly.express as px
 import hashlib
 import copy
 import io
+import json
 from scanner import Scanner
 from parser import Parser
 from categorizer import Categorizer
@@ -171,6 +172,22 @@ if uploaded_files:
                         st.rerun()
 
 with tab2:
+    st.subheader("Import Rules")
+    uploaded_rules = st.file_uploader(
+        "Upload rules.json",
+        type="json",
+        help="Replaces all current global rules and learned mappings. The current rules are backed up first.",
+        key="rules_upload",
+    )
+    if uploaded_rules and st.button("Import and Replace Rules", type="primary"):
+        try:
+            imported_rules = json.loads(uploaded_rules.getvalue().decode("utf-8"))
+            categorizer.import_rules(imported_rules)
+            st.success("Imported rules and mappings. A backup of the previous rules was created.")
+            st.rerun()
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            st.error(f"Could not import rules: {error}")
+
     st.header("⚙️ Category Management")
     
     # Emergency Restore Button

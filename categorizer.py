@@ -81,6 +81,40 @@ class Categorizer:
         self.save_rules()
         self._compile_regexes()
 
+    def import_rules(self, data):
+        """Validate and replace all rules and learned mappings from imported JSON data."""
+        if not isinstance(data, dict):
+            raise ValueError("The file must contain a JSON object.")
+
+        mappings = data.get('mappings')
+        rules = data.get('rules')
+
+        if not isinstance(mappings, dict) or not isinstance(rules, list):
+            raise ValueError("The file must contain a 'mappings' object and a 'rules' list.")
+        if not all(isinstance(keyword, str) and isinstance(category, str)
+                   for keyword, category in mappings.items()):
+            raise ValueError("Each mapping must use text for both its keyword and category.")
+
+        for rule in rules:
+            if not isinstance(rule, dict):
+                raise ValueError("Each rule must be an object.")
+            category = rule.get('category')
+            keywords = rule.get('keywords')
+            if not isinstance(category, str) or not category.strip():
+                raise ValueError("Each rule needs a non-empty text category.")
+            if not isinstance(keywords, list) or not all(isinstance(keyword, str) for keyword in keywords):
+                raise ValueError("Each rule needs a list of text keywords.")
+
+        self.mappings = {keyword.lower().strip(): category.strip() for keyword, category in mappings.items()}
+        self.rules = [
+            {
+                'category': rule['category'].strip(),
+                'keywords': [keyword.lower().strip() for keyword in rule['keywords'] if keyword.strip()]
+            }
+            for rule in rules
+        ]
+        self._persist_rules()
+
     def suggest_category(self, description):
         desc = description.lower()
 

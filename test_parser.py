@@ -61,22 +61,12 @@ class TestParser(unittest.TestCase):
         file_input = MagicMock()
         result = self.parser.parse_bank_statement(file_input)
 
-        self.assertEqual(len(result), 3) # row3 excluded
+        self.assertEqual(len(result), 1) # Positive amounts and excluded rows are ignored
 
-        tx1 = result[0]
-        self.assertEqual(tx1['date'], '2023-01-01')
-        self.assertEqual(tx1['description'], 'Test Transaction 1')
-        self.assertEqual(tx1['amount'], 1234.56)
-
-        tx2 = result[1]
+        tx2 = result[0]
         self.assertEqual(tx2['date'], '2023-01-02')
         self.assertEqual(tx2['description'], 'Test Transaction 2')
         self.assertEqual(tx2['amount'], -50.00)
-
-        tx4 = result[2]
-        self.assertEqual(tx4['date'], '2023-01-04')
-        self.assertEqual(tx4['description'], 'Unknown Transaction')
-        self.assertEqual(tx4['amount'], 100.0)
 
     def test_parse_amount(self):
         test_cases = [

@@ -126,7 +126,10 @@ class Parser:
                     continue
 
                 amount = Parser._parse_amount(row[amount_idx])
-                
+                # Only import expenses. Bank statements use negative amounts for outgoing payments.
+                if amount >= 0:
+                    continue
+
                 date_str = str(row[date_idx])
                 
                 desc_parts = []

@@ -1,5 +1,6 @@
 import pandas as pd
 import hashlib
+import os
 
 class Parser:
     @staticmethod
@@ -8,18 +9,73 @@ class Parser:
         Parses a bank statement from a CSV file.
         Supports various separators, encodings, and regional column names.
         """
+        transactions, _ = Parser.parse_bank_statement_with_report(file_input)
+        return transactions
+
+    @staticmethod
+    def parse_bank_statement_with_report(file_input):
+        """Parse a statement and return both transactions and an import report."""
+        report = {
+            'rows_read': 0,
+            'imported_expenses': 0,
+            'skipped_non_expenses': 0,
+            'skipped_missing_data': 0,
+            'skipped_excluded': 0,
+            'skipped_errors': 0,
+            'status': 'Imported',
+            'details': '',
+        }
+
         df = Parser._load_csv(file_input)
         if df is None:
-            return []
+            report['status'] = 'Not imported'
+            report['details'] = 'Could not read a supported CSV format or find an amount column.'
+            return [], report
+
+        report['rows_read'] = len(df)
 
         final_cols = Parser._map_columns(df)
         if not final_cols:
-            return []
+            report['status'] = 'Not imported'
+            report['details'] = 'Required columns are missing (date, description, or amount).'
+            return [], report
 
-        return Parser._extract_transactions(df, final_cols)
+        transactions, skipped = Parser._extract_transactions(df, final_cols, include_report=True)
+        report['imported_expenses'] = len(transactions)
+        report.update(skipped)
+        return transactions, report
 
     @staticmethod
     def _load_csv(file_input):
+        easybank_columns = [
+            'Kontonummer', 'Buchungstext', 'Buchungsdatum',
+            'Valutadatum', 'Betrag', 'Währung'
+        ]
+
+        # EASYBANK exports may contain transaction rows without a header row.
+        # Identify them by filename and supply the bank's fixed column layout.
+        file_name = os.path.basename(
+            str(file_input if isinstance(file_input, (str, os.PathLike))
+                else getattr(file_input, 'name', ''))
+        )
+        if file_name.upper().startswith('EASYBANK'):
+            for enc in ['utf-8', 'latin-1', 'cp1252']:
+                try:
+                    if hasattr(file_input, 'seek'):
+                        file_input.seek(0)
+
+                    df = pd.read_csv(
+                        file_input,
+                        sep=';',
+                        encoding=enc,
+                        header=None,
+                        names=easybank_columns,
+                    )
+                    print(f"Successfully loaded headerless EASYBANK CSV with encoding='{enc}'")
+                    return df
+                except Exception:
+                    continue
+
         separators = [';', ',']
         encodings = ['utf-8', 'latin-1', 'cp1252']
         possible_amount_cols = ['Amount', 'Betrag', 'amount', 'Wert']
@@ -110,7 +166,7 @@ class Parser:
             return 0.0
 
     @staticmethod
-    def _extract_transactions(df, final_cols):
+    def _extract_transactions(df, final_cols, include_report=False):
         amount_idx = df.columns.get_loc(final_cols['Amount'])
         date_idx = df.columns.get_loc(final_cols['Date'])
         txid_col = final_cols.get('TxID')
@@ -120,14 +176,22 @@ class Parser:
         desc_col_indices = [df.columns.get_loc(col) for col in potential_desc_cols if col in df.columns]
 
         transactions = []
+        skipped = {
+            'skipped_non_expenses': 0,
+            'skipped_missing_data': 0,
+            'skipped_excluded': 0,
+            'skipped_errors': 0,
+        }
         for row in df.itertuples(index=False, name=None):
             try:
                 if pd.isna(row[amount_idx]) or pd.isna(row[date_idx]):
+                    skipped['skipped_missing_data'] += 1
                     continue
 
                 amount = Parser._parse_amount(row[amount_idx])
                 # Only import expenses. Bank statements use negative amounts for outgoing payments.
                 if amount >= 0:
+                    skipped['skipped_non_expenses'] += 1
                     continue
 
                 date_str = str(row[date_idx])
@@ -144,6 +208,7 @@ class Parser:
                 
                 exclusions = ["General Currency Conversion", "General Authorization", "User Initiated Withdrawal"]
                 if any(ex in desc_str for ex in exclusions):
+                    skipped['skipped_excluded'] += 1
                     continue
                 
                 tx_unique_id = str(row[txid_idx]) if txid_idx is not None and not pd.isna(row[txid_idx]) else None
@@ -164,5 +229,8 @@ class Parser:
                 })
             except Exception as row_error:
                 print(f"Skipping row due to error: {row_error}")
+                skipped['skipped_errors'] += 1
                 
+        if include_report:
+            return transactions, skipped
         return transactions

@@ -1,4 +1,5 @@
 import unittest
+import io
 from unittest.mock import MagicMock, patch
 from parser import Parser
 
@@ -85,6 +86,39 @@ class TestParser(unittest.TestCase):
         for val, expected in test_cases:
             with self.subTest(val=val):
                 self.assertEqual(self.parser._parse_amount(val), expected)
+
+    def test_import_report_counts_imported_and_skipped_rows(self):
+        csv_data = io.StringIO(
+            "Datum;Name;Betrag\n"
+            "2023-01-01;Groceries;-12,50\n"
+            "2023-01-02;Salary;100,00\n"
+            "2023-01-03;General Authorization;-5,00\n"
+            ";Missing date;-3,00\n"
+        )
+
+        transactions, report = self.parser.parse_bank_statement_with_report(csv_data)
+
+        self.assertEqual(len(transactions), 1)
+        self.assertEqual(report['rows_read'], 4)
+        self.assertEqual(report['imported_expenses'], 1)
+        self.assertEqual(report['skipped_non_expenses'], 1)
+        self.assertEqual(report['skipped_excluded'], 1)
+        self.assertEqual(report['skipped_missing_data'], 1)
+
+    def test_easybank_headerless_csv_uses_fixed_headers(self):
+        csv_data = io.StringIO(
+            '123456;Supermarket;2023-01-01;2023-01-01;-12,50;EUR\n'
+            '123456;Salary;2023-01-02;2023-01-02;100,00;EUR\n'
+        )
+        csv_data.name = 'EASYBANK_statement.csv'
+
+        transactions, report = self.parser.parse_bank_statement_with_report(csv_data)
+
+        self.assertEqual(report['rows_read'], 2)
+        self.assertEqual(report['imported_expenses'], 1)
+        self.assertEqual(transactions[0]['date'], '2023-01-01')
+        self.assertEqual(transactions[0]['description'], 'Supermarket')
+        self.assertEqual(transactions[0]['amount'], -12.50)
 
 if __name__ == '__main__':
     unittest.main()

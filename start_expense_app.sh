@@ -1,17 +1,12 @@
-#!/bin/bash
-
+﻿#!/bin/bash
 set -e
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
-
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-    python desktop_launcher.py
-elif [ -f "venv/bin/activate" ]; then
-    source venv/bin/activate
-    python desktop_launcher.py
+if [ -x ".venv/bin/python" ]; then
+    .venv/bin/python desktop_app.py
+elif [ -x "venv/bin/python" ]; then
+    venv/bin/python desktop_app.py
 else
-    echo "Virtual environment not found. Please ensure '.venv' or 'venv' exists in $SCRIPT_DIR"
+    echo "Virtual environment not found."
     exit 1
 fi

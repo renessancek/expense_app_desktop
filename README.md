@@ -1,92 +1,82 @@
-# 💰 Expense App Desktop
+# Expense App Desktop
 
-A powerful and user-friendly desktop application for managing your personal finances. Automatically scan bank statements, categorize transactions, and gain insights into your spending habits.
+Eine browserfreie, lokale Desktop-Anwendung zum Einlesen, Kategorisieren und Auswerten von Kontoauszugs-CSV-Dateien. Die Oberfläche läuft nativ mit PySide6 – kein Browser und kein lokaler Webserver werden gestartet.
 
-## ✨ Features
+## Funktionen
 
-- **📂 Automated Scanning**: Watches a specific directory for new CSV bank statements.
-- **📄 CSV Parsing**: Extracts transaction data (Date, Description, Amount) from CSV files.
-- **🏷️ Smart Categorization**: Uses global rules and learned mappings to automatically categorize expenses.
-- **🖊️ Manual Overrides**: Easily correct categories and add new mappings directly from the UI.
-- **📊 Interactive Dashboard**:
-    - **Transactions**: View and manage recent transactions.
-    - **Category Editor**: Manage auto-categorization rules and learned mappings.
-    - **Statistics**: Visualize monthly and yearly spending with interactive charts.
-- **🐧 Ubuntu Integration**: Includes setup guides for automatic startup on Ubuntu.
+- CSV-Dateien aus `Dokumente/BankStatements` scannen oder manuell importieren
+- Transaktionstabelle mit Sortierung, Paginierung sowie Kategorie-, Monats- und Live-Textsuche
+- Regeln importieren, anlegen, löschen und aus Sicherungen wiederherstellen
+- Kategorien summieren und als Excel-Datei exportieren
 
-## 🛠️ Tech Stack
+## Windows 10/11
 
-- **Python 3.x**
-- **Streamlit**: For the interactive web interface.
-- **Pandas**: For data manipulation and CSV parsing.
-- **watchdog**: For real-time directory monitoring.
+### Einrichten und starten
 
-## 🚀 Getting Started
-
-### Prerequisites
-
-Ensure you have Python 3.x installed. You can check your version with:
-```bash
-python3 --version
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\start_expense_app.ps1
 ```
 
-### Installation
+Für einen Startmenü-Eintrag:
 
-1. **Clone the repository** (if applicable) or navigate to the project folder.
-2. **Create a virtual environment**:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```powershell
+.\install_windows_app.ps1
+```
 
-### Usage
+Für Autostart bei der Anmeldung:
 
-1. **Start as a normal Ubuntu app (recommended)**:
-   ```bash
-   chmod +x install_ubuntu_app.sh start_expense_app.sh
-   ./install_ubuntu_app.sh
-   ```
-   Then open your app launcher and search for **Expense App Desktop**.
+```powershell
+.\install_windows_app.ps1 -EnableAutostart
+```
 
-2. **Start directly from terminal**:
-   ```bash
-   ./start_expense_app.sh
-   ```
+Zum Entfernen der Startmenü- und Autostart-Verknüpfung:
 
-3. **Stop the app**:
-   Close the app window. This automatically shuts down the background Streamlit server.
-4. **Logs**:
-   Startup/runtime logs are written to:
-   ```bash
-   ~/.cache/expense-app-desktop/launcher.log
-   ```
-   Log rotation is automatic (max ~5 MB per file, keeps 5 backups).
-5. **Rules storage**:
-   Learned mappings and category rules are stored in:
-   ```bash
-   ~/.local/share/expense-app-desktop/rules.json
-   ```
-   Existing project-root `rules.json` is migrated automatically on first run.
-2. **Scan for CSVs**: Place your bank statement CSVs in the monitored directory (defaulting to the project root or as specified in `scanner.py`).
-3. **Upload Manually**: Use the file uploader in the "Transactions" tab to process CSVs directly.
-4. **Categorize**: Review transaction categories and use the dropdowns to train the app for better accuracy.
+```powershell
+.\uninstall_windows_app.ps1
+```
 
-## 📁 Project Structure
+Die Anwendung öffnet ein natives Desktop-Fenster. Es wird kein Browser gestartet.
 
-- `app.py`: Main Streamlit application and UI logic.
-- `scanner.py`: Logic for watching and scanning directories for new CSV files.
-- `parser.py`: Extracts transaction data from CSV files.
-- `categorizer.py`: Manages rules and logic for transaction categorization.
-- `rules.json`: Stores global categorization rules and learned mappings.
-- `STARTUP_SETUP.md`: Detailed guide for Ubuntu startup integration.
+## Ubuntu/Linux
 
-## 🔧 Ubuntu Startup Setup
+### Einrichten und starten
 
-For startup-on-login instructions, refer to the [Ubuntu Startup Setup Guide](STARTUP_SETUP.md).
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+chmod +x start_expense_app.sh install_ubuntu_app.sh
+./start_expense_app.sh
+```
 
----
-*Created by Antigravity for a seamless expense tracking experience.*
+Für einen Eintrag im Anwendungsmenü:
+
+```bash
+./install_ubuntu_app.sh
+```
+
+Für Autostart den absoluten Pfad zu `start_expense_app.sh` in den Systemeinstellungen unter **Startup Applications** hinterlegen.
+
+Zum Entfernen des Anwendungsmenü-Eintrags:
+
+```bash
+chmod +x uninstall_ubuntu_app.sh
+./uninstall_ubuntu_app.sh
+```
+
+Auch unter Ubuntu läuft die Anwendung nativ mit PySide6 und benötigt keinen Browser oder lokalen Webserver.
+
+## EXE-Paket erstellen
+
+Nach der Installation der Abhängigkeiten:
+
+```powershell
+.\build_windows_exe.ps1
+```
+
+Das Ergebnis liegt anschließend unter `dist\Expense App Desktop\Expense App Desktop.exe`.
+
+## Daten
+
+Regeln und Backups bleiben im persönlichen Datenordner. Unter Windows ist das `%LOCALAPPDATA%\Expense App Desktop`; unter Linux `~/.local/share/expense-app-desktop` (oder der über `XDG_DATA_HOME` konfigurierte Ordner). Der Standardordner für Kontoauszüge ist unter Windows `Dokumente/BankStatements`, unter Linux `~/Documents/BankStatements`.

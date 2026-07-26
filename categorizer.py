@@ -3,12 +3,12 @@ import json
 import os
 import re
 import shutil
+from app_paths import user_data_dir
 
 class Categorizer:
     def __init__(self, rules_path=None):
         if rules_path is None:
-            default_dir = os.path.join(os.path.expanduser('~'), '.local', 'share', 'expense-app-desktop')
-            self.rules_path = os.path.join(default_dir, 'rules.json')
+            self.rules_path = str(user_data_dir() / 'rules.json')
             self._migrate_legacy_rules()
         else:
             self.rules_path = rules_path
@@ -29,10 +29,8 @@ class Categorizer:
         if os.path.exists(self.rules_path):
             with open(self.rules_path, 'r') as f:
                 data = json.load(f)
-                self.mappings = data.get('mappings', {})
                 self.rules = data.get('rules', [])
         else:
-            self.mappings = {}
             self.rules = []
 
         self._compile_regexes()
@@ -45,11 +43,6 @@ class Categorizer:
                 'category': rule['category'],
                 'compiled_keywords': compiled_keywords
             })
-
-        self._compiled_mappings = []
-        for keyword, category in self.mappings.items():
-            self._compiled_mappings.append((re.compile(rf'\b{re.escape(keyword.lower())}\b'), category))
-
 
     def save_rules(self):
         os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
@@ -71,7 +64,6 @@ class Categorizer:
                     os.remove(old_backup)
 
         data = {
-            'mappings': self.mappings,
             'rules': self.rules
         }
         with open(self.rules_path, 'w') as f:
@@ -82,18 +74,14 @@ class Categorizer:
         self._compile_regexes()
 
     def import_rules(self, data):
-        """Validate and replace all rules and learned mappings from imported JSON data."""
+        """Validate and replace all global rules from imported JSON data."""
         if not isinstance(data, dict):
             raise ValueError("The file must contain a JSON object.")
 
-        mappings = data.get('mappings')
         rules = data.get('rules')
 
-        if not isinstance(mappings, dict) or not isinstance(rules, list):
-            raise ValueError("The file must contain a 'mappings' object and a 'rules' list.")
-        if not all(isinstance(keyword, str) and isinstance(category, str)
-                   for keyword, category in mappings.items()):
-            raise ValueError("Each mapping must use text for both its keyword and category.")
+        if not isinstance(rules, list):
+            raise ValueError("The file must contain a 'rules' list.")
 
         for rule in rules:
             if not isinstance(rule, dict):
@@ -105,7 +93,6 @@ class Categorizer:
             if not isinstance(keywords, list) or not all(isinstance(keyword, str) for keyword in keywords):
                 raise ValueError("Each rule needs a list of text keywords.")
 
-        self.mappings = {keyword.lower().strip(): category.strip() for keyword, category in mappings.items()}
         self.rules = [
             {
                 'category': rule['category'].strip(),
@@ -124,23 +111,7 @@ class Categorizer:
                 if pattern.search(desc):
                     return compiled_rule['category']
 
-
-        # 2. Second priority: Learned Mappings
-        for pattern, category in self._compiled_mappings:
-            if pattern.search(desc):
-                return category
-
         return 'Sonstiges'
-
-    def add_mapping(self, keyword, category):
-        self.mappings[keyword.lower()] = category
-        self._persist_rules()
-
-    def delete_mapping(self, keyword):
-        normalized_keyword = keyword.lower().strip()
-        if normalized_keyword in self.mappings:
-            del self.mappings[normalized_keyword]
-            self._persist_rules()
 
     def add_rule(self, keywords, category):
         # Check if rule with this category already exists and append keywords
@@ -158,9 +129,8 @@ class Categorizer:
         self._persist_rules()
 
     def get_all_categories(self):
-        # Unique set of categories from rules and mappings
+        # Unique set of categories from rules
         cats = {rule['category'] for rule in self.rules}
-        cats.update(self.mappings.values())
         
         # Ensure default essential categories exist
         defaults = {"Sonstiges", "Supermarkt", "Amazon", "Versicherung", "Computerspiele", "Trading", "Haus"}
@@ -177,15 +147,10 @@ class Categorizer:
         return False
 
     def rename_category(self, old_name, new_name):
-        """Renames a category in both mappings and rules."""
+        """Renames a category in all global rules."""
         if not new_name or old_name == new_name:
             return False
             
-        # Update mappings
-        for keyword, category in self.mappings.items():
-            if category == old_name:
-                self.mappings[keyword] = new_name
-                
         # Update rules
         for rule in self.rules:
             if rule['category'] == old_name:
@@ -208,8 +173,3 @@ class Categorizer:
         shutil.copy2(latest_backup, self.rules_path)
         self.load_rules()
         return True, f"Restored from {os.path.basename(latest_backup)}"
-
-    def extract_keyword(self, description):
-        # Extract a potential keyword from a description (e.g., the first two words)
-        words = description.split()
-        return " ".join(words[:2]).lower() if words else ""

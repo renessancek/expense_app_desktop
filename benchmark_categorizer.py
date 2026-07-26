@@ -4,7 +4,7 @@ import tempfile
 import json
 from categorizer import Categorizer
 
-def create_dummy_rules(num_rules, num_mappings):
+def create_dummy_rules(num_rules):
     rules = []
     for i in range(num_rules):
         rules.append({
@@ -12,28 +12,22 @@ def create_dummy_rules(num_rules, num_mappings):
             "category": f"category_rule_{i}"
         })
 
-    mappings = {}
-    for i in range(num_mappings):
-        mappings[f"mapping_keyword_{i}"] = f"category_mapping_{i}"
-
-    return {"rules": rules, "mappings": mappings}
+    return {"rules": rules}
 
 def run_benchmark():
     # Create a temporary rules file
     fd, path = tempfile.mkstemp(suffix='.json')
     try:
         with os.fdopen(fd, 'w') as f:
-            json.dump(create_dummy_rules(100, 1000), f)
+            json.dump(create_dummy_rules(100), f)
 
         categorizer = Categorizer(rules_path=path)
 
         # Test dataset
         descriptions = [
-            "This is a random description mapping_keyword_500 that should match.",
             "Another keyword_50_a test that matches rules.",
             "Something completely different that won't match anything at all.",
-            "mapping_keyword_999 is at the beginning.",
-            "End of the string mapping_keyword_10",
+            "A second keyword_20_b test that matches rules.",
         ] * 200 # 1000 descriptions total
 
         start_time = time.perf_counter()

@@ -1,8 +1,11 @@
-import unittest
+import json
 import os
-import tempfile
 import shutil
+import tempfile
+import unittest
+
 from categorizer import Categorizer
+
 
 class TestCategorizer(unittest.TestCase):
     def setUp(self):
@@ -13,125 +16,41 @@ class TestCategorizer(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
-    def test_extract_keyword(self):
-        test_cases = [
-            ("REWE SAGT DANKE", "rewe sagt", "normal description"),
-            ("AMAZON", "amazon", "single word"),
-            ("", "", "empty string"),
-            ("  APPLE   STORE  ", "apple store", "extra spaces"),
-            ("NETTO MARKEN-DISCOUNT NUERNBERG", "netto marken-discount", "more than two words"),
-        ]
-
-        for description, expected, msg in test_cases:
-            with self.subTest(msg=msg, description=description):
-                self.assertEqual(self.categorizer.extract_keyword(description), expected)
-
-    # --- suggest_category tests ---
-
-    def test_suggest_category_default(self):
-        """Returns 'Sonstiges' when no rules or mappings match."""
+    def test_unknown_description_uses_fallback(self):
         self.assertEqual(self.categorizer.suggest_category("unknown vendor xyz"), "Sonstiges")
 
-    def test_suggest_category_matches_rule(self):
-        """Matches a rule keyword and returns its category."""
-        self.categorizer.add_rule(["rewe"], "Supermarkt")
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Supermarkt")
-
-    def test_suggest_category_matches_mapping(self):
-        """Matches a learned mapping and returns its category."""
-        self.categorizer.add_mapping("amazon", "Shopping")
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Shopping")
-
-    def test_suggest_category_rules_take_precedence_over_mappings(self):
-        """Rules have higher priority than mappings for the same keyword."""
-        self.categorizer.add_mapping("rewe", "Shopping")
-        self.categorizer.add_rule(["rewe"], "Supermarkt")
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Supermarkt")
-
-    def test_suggest_category_word_boundary(self):
-        """Word-boundary matching prevents partial-word false positives."""
-        self.categorizer.add_rule(["net"], "NetCategory")
-        # 'net' should not match 'netto' due to word boundary
-        self.assertEqual(self.categorizer.suggest_category("NETTO DISCOUNT"), "Sonstiges")
-        # but should match standalone 'net'
-        self.assertEqual(self.categorizer.suggest_category("pay via net transfer"), "NetCategory")
-
-    def test_suggest_category_case_insensitive(self):
-        """Matching is case-insensitive."""
+    def test_rule_matches_case_insensitively(self):
         self.categorizer.add_rule(["REWE"], "Supermarkt")
         self.assertEqual(self.categorizer.suggest_category("rewe sagt danke"), "Supermarkt")
 
-    # --- mutation operation tests ---
+    def test_rule_uses_word_boundaries(self):
+        self.categorizer.add_rule(["net"], "Internet")
+        self.assertEqual(self.categorizer.suggest_category("NETTO DISCOUNT"), "Sonstiges")
+        self.assertEqual(self.categorizer.suggest_category("pay via net transfer"), "Internet")
 
-    def test_add_mapping_takes_effect_immediately(self):
-        """suggest_category reflects a new mapping right after add_mapping."""
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Sonstiges")
-        self.categorizer.add_mapping("amazon", "Shopping")
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Shopping")
-
-    def test_delete_mapping_takes_effect_immediately(self):
-        """suggest_category no longer matches after delete_mapping."""
-        self.categorizer.add_mapping("amazon", "Shopping")
-        self.categorizer.delete_mapping("amazon")
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Sonstiges")
-
-    def test_delete_mapping_case_insensitive(self):
-        """delete_mapping works regardless of the case passed by the caller."""
-        self.categorizer.add_mapping("amazon", "Shopping")
-        self.categorizer.delete_mapping("AMAZON")
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Sonstiges")
-
-    def test_add_rule_takes_effect_immediately(self):
-        """suggest_category reflects a new rule right after add_rule."""
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Sonstiges")
+    def test_update_and_delete_rule_take_effect_immediately(self):
         self.categorizer.add_rule(["rewe"], "Supermarkt")
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Supermarkt")
-
-    def test_delete_rule_takes_effect_immediately(self):
-        """suggest_category no longer matches a rule after delete_rule."""
-        self.categorizer.add_rule(["rewe"], "Supermarkt")
-        self.categorizer.delete_rule("Supermarkt")
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Sonstiges")
-
-    def test_update_rule_keywords_takes_effect_immediately(self):
-        """suggest_category uses the updated keywords after update_rule_keywords."""
-        self.categorizer.add_rule(["rewe"], "Supermarkt")
-        self.categorizer.update_rule_keywords("Supermarkt", ["aldi"])
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Sonstiges")
+        self.assertTrue(self.categorizer.update_rule_keywords("Supermarkt", ["aldi"]))
+        self.assertEqual(self.categorizer.suggest_category("REWE"), "Sonstiges")
         self.assertEqual(self.categorizer.suggest_category("ALDI SUED"), "Supermarkt")
+        self.categorizer.delete_rule("Supermarkt")
+        self.assertEqual(self.categorizer.suggest_category("ALDI SUED"), "Sonstiges")
 
-    def test_rename_category(self):
-        """rename_category updates both rules and mappings."""
+    def test_rename_category_updates_rule(self):
         self.categorizer.add_rule(["rewe"], "Supermarkt")
-        self.categorizer.add_mapping("amazon", "Shopping")
-        
-        self.categorizer.rename_category("Supermarkt", "Grocery")
-        self.categorizer.rename_category("Shopping", "Online")
-        
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Grocery")
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Online")
+        self.assertTrue(self.categorizer.rename_category("Supermarkt", "Groceries"))
+        self.assertEqual(self.categorizer.suggest_category("REWE"), "Groceries")
 
-    def test_restore_latest_backup(self):
-        """restore_latest_backup reverts to previous state."""
-        self.categorizer.add_mapping("amazon", "Shopping")
-        # save_rules creates a backup
-        self.categorizer.add_mapping("rewe", "Supermarkt")
-        
-        # Now change it
-        self.categorizer.add_mapping("amazon", "NewCategory")
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "NewCategory")
-        
-        # Restore
-        success, msg = self.categorizer.restore_latest_backup()
-        self.assertTrue(success)
-        # It should restore to the state before "NewCategory" change
-        # Actually, every _persist_rules calls save_rules which creates a backup of the OLD file
-        # 1. add_mapping("amazon", "Shopping") -> saves {"amazon": "Shopping"}, backup: None
-        # 2. add_mapping("rewe", "Supermarkt") -> saves {"amazon": "Shopping", "rewe": "Supermarkt"}, backup: {"amazon": "Shopping"}
-        # 3. add_mapping("amazon", "NewCategory") -> saves ..., backup: {"amazon": "Shopping", "rewe": "Supermarkt"}
-        
-        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Shopping")
-        self.assertEqual(self.categorizer.suggest_category("REWE SAGT DANKE"), "Supermarkt")
+    def test_import_uses_rules_and_discards_legacy_mappings(self):
+        self.categorizer.import_rules({
+            "mappings": {"amazon": "Shopping"},
+            "rules": [{"category": "Groceries", "keywords": ["rewe"]}],
+        })
+        self.assertEqual(self.categorizer.suggest_category("REWE"), "Groceries")
+        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Sonstiges")
+        with open(self.rules_path, encoding="utf-8") as rules_file:
+            self.assertEqual(json.load(rules_file), {"rules": [{"category": "Groceries", "keywords": ["rewe"]}]})
+
 
 if __name__ == "__main__":
     unittest.main()

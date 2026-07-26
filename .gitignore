@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+.test_tmp/
 *.py[cod]
 *$py.class
 venv/
@@ -14,6 +15,7 @@ backups/
 *.pdf
 *.csv
 *.xlsx
+*.exe
 
 # OS junk
 .DS_Store

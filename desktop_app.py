@@ -7,18 +7,24 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QTimer, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
-    QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
-    QSpinBox, QSplitter, QTabWidget, QTableView, QVBoxLayout, QWidget,
+    QApplication, QComboBox, QFileDialog, QFormLayout,
+    QGridLayout, QGroupBox, QHeaderView, QHBoxLayout, QLabel, QLineEdit,
+    QCheckBox, QMainWindow, QMessageBox, QPushButton, QScrollArea, QSpinBox,
+    QSplitter, QTabWidget, QTableView, QVBoxLayout, QWidget,
 )
 
 from categorizer import Categorizer
 from expense_data import ExpenseDataStore
 from parser import Parser
 from scanner import Scanner
+
+
+def statistics_for_categories(totals, categories):
+    """Return the category totals selected for an export."""
+    return totals[totals["Category"].isin(categories)].copy()
 
 
 class DataFrameModel(QAbstractTableModel):
@@ -63,6 +69,14 @@ class ExpenseWindow(QMainWindow):
     PAGE_SIZE = 20
     TABLE_COLUMNS = ["Date", "Description", "Amount", "Category", "Source", "File"]
     FRAME_COLUMNS = ["date", "description", "amount", "category", "source", "file"]
+    TRANSACTION_COLUMN_LIMITS = {
+        "Date": (105, 135),
+        "Description": (230, 700),
+        "Amount": (105, 135),
+        "Category": (150, 260),
+        "Source": (140, 240),
+        "File": (170, 340),
+    }
 
     def __init__(self):
         super().__init__()
@@ -106,7 +120,11 @@ class ExpenseWindow(QMainWindow):
         self.transaction_model = DataFrameModel(self.TABLE_COLUMNS, self)
         self.transaction_table = QTableView(); self.transaction_table.setModel(self.transaction_model)
         self.transaction_table.setSelectionBehavior(QTableView.SelectRows); self.transaction_table.setEditTriggers(QTableView.NoEditTriggers)
-        self.transaction_table.horizontalHeader().sectionClicked.connect(self.change_sort)
+        self.transaction_table.setTextElideMode(Qt.ElideRight)
+        header = self.transaction_table.horizontalHeader()
+        header.setStretchLastSection(False); header.setMinimumSectionSize(80)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.sectionClicked.connect(self.change_sort)
         self.transaction_table.doubleClicked.connect(self.show_transaction_details); layout.addWidget(self.transaction_table, 1)
         pagination = QHBoxLayout(); self.previous = QPushButton("Previous"); self.next = QPushButton("Next")
         self.page_spin = QSpinBox(); self.page_spin.setMinimum(1); self.page_label = QLabel()
@@ -130,8 +148,26 @@ class ExpenseWindow(QMainWindow):
 
     def _statistics_tab(self):
         page = QWidget(); layout = QVBoxLayout(page); layout.addWidget(QLabel("Category totals for all imported expenses"))
-        self.stats_model = DataFrameModel(["Category", "Total spent (€)"], self); table = QTableView(); table.setModel(self.stats_model); layout.addWidget(table)
-        export = QPushButton("Export category totals to Excel…"); export.clicked.connect(self.export_statistics); layout.addWidget(export); return page
+        self.stats_model = DataFrameModel(["Category", "Total spent (€)"], self)
+        self.statistics_table = QTableView(); self.statistics_table.setModel(self.stats_model); self.statistics_table.setMaximumHeight(240)
+        layout.addWidget(self.statistics_table)
+        export_selection = QGroupBox("Categories to export")
+        export_selection_layout = QVBoxLayout(export_selection)
+        export_selection_layout.setContentsMargins(9, 7, 9, 7); export_selection_layout.setSpacing(5)
+        export_selection_layout.addWidget(QLabel("Select the category totals to include in the Excel file:"))
+        self.export_category_checkboxes = []
+        self.export_category_grid = QWidget(); self.export_category_grid_layout = QGridLayout(self.export_category_grid)
+        self.export_category_grid_layout.setContentsMargins(4, 2, 4, 2); self.export_category_grid_layout.setHorizontalSpacing(18); self.export_category_grid_layout.setVerticalSpacing(2); self.export_category_grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.export_category_scroll = QScrollArea(); self.export_category_scroll.setWidgetResizable(True); self.export_category_scroll.setWidget(self.export_category_grid)
+        export_selection_layout.addWidget(self.export_category_scroll, 1)
+        selection_controls = QHBoxLayout()
+        select_all = QPushButton("Select all"); clear_all = QPushButton("Select none")
+        select_all.clicked.connect(lambda: self._set_category_checks(Qt.Checked))
+        clear_all.clicked.connect(lambda: self._set_category_checks(Qt.Unchecked))
+        selection_controls.addWidget(select_all); selection_controls.addWidget(clear_all); selection_controls.addStretch()
+        export_selection_layout.addLayout(selection_controls)
+        layout.addWidget(export_selection, 1)
+        export = QPushButton("Export selected category totals to Excel…"); export.clicked.connect(self.export_statistics); layout.addWidget(export); return page
 
     def choose_csv_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Import bank statements", "", "CSV files (*.csv)")
@@ -167,12 +203,43 @@ class ExpenseWindow(QMainWindow):
         self.page_spin.blockSignals(True); self.page_spin.setRange(1, pages); self.page_spin.setValue(self.page); self.page_spin.blockSignals(False)
         start = (self.page - 1) * self.PAGE_SIZE; display = frame.iloc[start:start + self.PAGE_SIZE]
         shown = display.rename(columns=dict(zip(self.FRAME_COLUMNS, self.TABLE_COLUMNS)))
-        self.transaction_model.set_frame(shown); self.result_label.setText(f"Showing {start + 1 if total else 0}–{min(start + self.PAGE_SIZE, total)} of {total} transactions")
+        self.transaction_model.set_frame(shown); self._schedule_transaction_column_resize(); self.result_label.setText(f"Showing {start + 1 if total else 0}–{min(start + self.PAGE_SIZE, total)} of {total} transactions")
         self.page_label.setText(f"of {pages}"); self.previous.setEnabled(self.page > 1); self.next.setEnabled(self.page < pages)
         full = self.store.dataframe; self.total_label.setText(f"Total transactions: {len(full)}"); self.spent_label.setText(f"Total spent: {abs(full.loc[full['amount'] < 0, 'amount'].sum()):.2f} €")
         self.categorized_label.setText(f"Categorized: {(full['category'] != 'Sonstiges').sum()}")
         self.report_model.set_frame(self.store.reports_dataframe())
 
+    def _schedule_transaction_column_resize(self):
+        """Resize transaction columns after the table has applied its new data and layout."""
+        QTimer.singleShot(0, self._resize_transaction_columns)
+
+    def _resize_transaction_columns(self):
+        """Fit visible content while bounding long text columns and using spare space."""
+        table = self.transaction_table
+        available_width = table.viewport().width()
+        widths = []
+        for index, column in enumerate(self.TABLE_COLUMNS):
+            minimum, maximum = self.TRANSACTION_COLUMN_LIMITS[column]
+            content_width = table.sizeHintForColumn(index) + 18
+            widths.append(max(minimum, min(content_width, maximum)))
+
+        remaining_width = max(0, available_width - sum(widths))
+        for column in ("Description", "File", "Source"):
+            if not remaining_width:
+                break
+            index = self.TABLE_COLUMNS.index(column)
+            maximum = self.TRANSACTION_COLUMN_LIMITS[column][1]
+            extra_width = min(remaining_width, maximum - widths[index])
+            widths[index] += extra_width
+            remaining_width -= extra_width
+
+        for index, width in enumerate(widths):
+            table.setColumnWidth(index, width)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "transaction_table"):
+            self._schedule_transaction_column_resize()
     def show_transaction_details(self, index):
         row = self.transaction_model.frame.iloc[index.row()]
         QMessageBox.information(self, "Transaction", f"Description: {row['Description']}\nCategory: {row['Category']}\nSource: {row['Source']} ({row['File']})")
@@ -206,19 +273,57 @@ class ExpenseWindow(QMainWindow):
 
     def refresh_statistics(self):
         frame = self.store.dataframe
-        if frame.empty: return self.stats_model.set_frame(pd.DataFrame(columns=["Category", "Total spent (€)"]))
-        expenses = frame[frame["amount"] < 0].copy(); expenses["amount"] = expenses["amount"].abs()
-        totals = expenses.groupby("category", as_index=False)["amount"].sum().sort_values("amount", ascending=False).rename(columns={"category": "Category", "amount": "Total spent (€)"})
-        self.stats_model.set_frame(totals)
+        if frame.empty:
+            self.stats_model.set_frame(pd.DataFrame(columns=["Category", "Total spent (€)"]))
+        else:
+            expenses = frame[frame["amount"] < 0].copy(); expenses["amount"] = expenses["amount"].abs()
+            totals = expenses.groupby("category", as_index=False)["amount"].sum().sort_values("amount", ascending=False).rename(columns={"category": "Category", "amount": "Total spent (€)"})
+            self.stats_model.set_frame(totals)
+        self._refresh_export_category_selection()
+
+    def _refresh_export_category_selection(self):
+        """Keep existing export choices while selecting newly available categories by default."""
+        previous_states = {checkbox.text(): checkbox.isChecked() for checkbox in self.export_category_checkboxes}
+        while self.export_category_grid_layout.count():
+            item = self.export_category_grid_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+        self.export_category_checkboxes = []
+        categories = [str(category) for category in self.stats_model.frame["Category"]]
+        columns = 3
+        rows = max(1, (len(categories) + columns - 1) // columns)
+        for index, category in enumerate(categories):
+            checkbox = QCheckBox(category)
+            checkbox.setChecked(previous_states.get(category, True))
+            self.export_category_checkboxes.append(checkbox)
+            self.export_category_grid_layout.addWidget(checkbox, index % rows, index // rows)
+        for column in range(columns):
+            self.export_category_grid_layout.setColumnStretch(column, 1)
+
+    def _selected_export_categories(self):
+        return [checkbox.text() for checkbox in self.export_category_checkboxes if checkbox.isChecked()]
 
     def export_statistics(self):
+        categories = self._selected_export_categories()
+        if not categories:
+            QMessageBox.warning(self, "No categories selected", "Select at least one category to export.")
+            return
+
         path, _ = QFileDialog.getSaveFileName(self, "Export category totals", "expense_report.xlsx", "Excel files (*.xlsx)")
-        if path: self.stats_model.frame.to_excel(path, index=False)
+        if not path:
+            return
+        try:
+            statistics_for_categories(self.stats_model.frame, categories).to_excel(path, index=False)
+        except OSError as error:
+            QMessageBox.critical(self, "Export failed", str(error))
+
+    def _set_category_checks(self, check_state):
+        for checkbox in self.export_category_checkboxes:
+            checkbox.setChecked(check_state == Qt.Checked)
 
 
 def main():
     app = QApplication(sys.argv); app.setApplicationName("Expense App Desktop")
-    window = ExpenseWindow(); window.show(); return app.exec()
+    window = ExpenseWindow(); window.showMaximized(); return app.exec()
 
 
 if __name__ == "__main__":

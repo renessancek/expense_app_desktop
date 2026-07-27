@@ -27,6 +27,9 @@ def statistics_for_categories(totals, categories):
     return totals[totals["Category"].isin(categories)].copy()
 
 
+DEFAULT_UNSELECTED_EXPORT_CATEGORIES = {"Abhebung", "Investments", "Firma", "Privat", "Paypal"}
+
+
 class DataFrameModel(QAbstractTableModel):
     def __init__(self, columns, parent=None):
         super().__init__(parent)
@@ -283,24 +286,25 @@ class ExpenseWindow(QMainWindow):
 
     def _refresh_export_category_selection(self):
         """Keep existing export choices while selecting newly available categories by default."""
-        previous_states = {checkbox.text(): checkbox.isChecked() for checkbox in self.export_category_checkboxes}
+        previous_states = {checkbox.property("category_name"): checkbox.isChecked() for checkbox in self.export_category_checkboxes}
         while self.export_category_grid_layout.count():
             item = self.export_category_grid_layout.takeAt(0)
             if item.widget(): item.widget().deleteLater()
         self.export_category_checkboxes = []
-        categories = [str(category) for category in self.stats_model.frame["Category"]]
+        categories = sorted((str(category) for category in self.stats_model.frame["Category"]), key=str.casefold)
         columns = 3
         rows = max(1, (len(categories) + columns - 1) // columns)
         for index, category in enumerate(categories):
-            checkbox = QCheckBox(category)
-            checkbox.setChecked(previous_states.get(category, True))
+            checkbox = QCheckBox(category.replace("&", "&&"))
+            checkbox.setProperty("category_name", category)
+            checkbox.setChecked(previous_states.get(category, category not in DEFAULT_UNSELECTED_EXPORT_CATEGORIES))
             self.export_category_checkboxes.append(checkbox)
             self.export_category_grid_layout.addWidget(checkbox, index % rows, index // rows)
         for column in range(columns):
             self.export_category_grid_layout.setColumnStretch(column, 1)
 
     def _selected_export_categories(self):
-        return [checkbox.text() for checkbox in self.export_category_checkboxes if checkbox.isChecked()]
+        return [checkbox.property("category_name") for checkbox in self.export_category_checkboxes if checkbox.isChecked()]
 
     def export_statistics(self):
         categories = self._selected_export_categories()

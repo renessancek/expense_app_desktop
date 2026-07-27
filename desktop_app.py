@@ -50,7 +50,7 @@ def write_yearly_statistics_export(path, expenses, categories, rules):
             total = pd.DataFrame([{"category": "TOTAL", "amount": summary["amount"].sum()}])
             pd.concat([summary, total], ignore_index=True).to_excel(writer, sheet_name=month, index=False)
 
-        monthly_totals = expenses.groupby("Month", as_index=False)["amount"].sum().sort_values("amount", ascending=False)
+        monthly_totals = expenses.groupby("Month", as_index=False)["amount"].sum().sort_values("Month")
         monthly_total = pd.DataFrame([{"Month": "GRAND TOTAL", "amount": monthly_totals["amount"].sum()}])
         pd.concat([monthly_totals, monthly_total], ignore_index=True).to_excel(writer, sheet_name="Monthly Totals", index=False)
 

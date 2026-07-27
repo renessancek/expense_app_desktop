@@ -67,5 +67,7 @@ class TestYearlyStatisticsExport(unittest.TestCase):
             self.assertEqual(january.columns.tolist(), ["category", "amount"])
             self.assertEqual(january["category"].tolist(), ["Food", "TOTAL"])
             self.assertEqual(january["amount"].tolist(), [10.0, 10.0])
+            monthly_totals = pd.read_excel(path, sheet_name="Monthly Totals")
+            self.assertEqual(monthly_totals["Month"].tolist(), ["2026-01", "2026-02", "2026-03", "GRAND TOTAL"])
             configured = pd.read_excel(path, sheet_name="Configured Categories")
             self.assertEqual(configured["category"].tolist(), ["Food", "Rent"])

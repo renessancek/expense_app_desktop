@@ -30,6 +30,59 @@ def statistics_for_categories(totals, categories):
 DEFAULT_UNSELECTED_EXPORT_CATEGORIES = {"Abhebung", "Investments", "Firma", "Privat", "Paypal"}
 
 
+def selected_expenses_for_export(frame, categories):
+    """Return the selected expense transactions with month and year columns for reporting."""
+    expenses = frame[(frame["amount"] < 0) & frame["category"].isin(categories)].copy()
+    if expenses.empty:
+        return expenses
+    expenses["amount"] = expenses["amount"].abs()
+    expenses["Month"] = expenses["date"].dt.strftime("%Y-%m")
+    expenses["Year"] = expenses["date"].dt.year
+    return expenses
+
+
+def write_yearly_statistics_export(path, expenses, categories, rules):
+    """Write selected expense data in the legacy multi-sheet annual report structure."""
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        for month in sorted(expenses["Month"].unique()):
+            summary = (expenses[expenses["Month"] == month].groupby("category", as_index=False)["amount"].sum()
+                       .sort_values("amount", ascending=False))
+            total = pd.DataFrame([{"category": "TOTAL", "amount": summary["amount"].sum()}])
+            pd.concat([summary, total], ignore_index=True).to_excel(writer, sheet_name=month, index=False)
+
+        monthly_totals = expenses.groupby("Month", as_index=False)["amount"].sum().sort_values("amount", ascending=False)
+        monthly_total = pd.DataFrame([{"Month": "GRAND TOTAL", "amount": monthly_totals["amount"].sum()}])
+        pd.concat([monthly_totals, monthly_total], ignore_index=True).to_excel(writer, sheet_name="Monthly Totals", index=False)
+
+        months = expenses["Month"].nunique()
+        averages = expenses.groupby("category", as_index=False)["amount"].sum()
+        averages["average_per_month"] = averages["amount"] / months
+        averages = averages[["category", "average_per_month"]].sort_values("average_per_month", ascending=False)
+        averages.to_excel(writer, sheet_name="Average Monthly Expenses", index=False)
+
+        comparison = expenses.pivot_table(index="category", columns="Year", values="amount", aggfunc="sum", fill_value=0).reset_index()
+        year_columns = [column for column in comparison.columns if column != "category"]
+        comparison["_total"] = comparison[year_columns].sum(axis=1)
+        comparison = comparison.sort_values("_total", ascending=False).drop(columns="_total")
+        comparison_total = pd.DataFrame([{**{"category": "TOTAL"}, **comparison[year_columns].sum().to_dict()}])
+        pd.concat([comparison, comparison_total], ignore_index=True).to_excel(writer, sheet_name="Yearly Comparison", index=False)
+
+        yearly_summary = (expenses.groupby(["Year", "category"], as_index=False)["amount"].sum()
+                          .sort_values(["Year", "amount"], ascending=[False, False]))
+        yearly_total = pd.DataFrame([{"Year": "GRAND TOTAL", "category": "-", "amount": yearly_summary["amount"].sum()}])
+        pd.concat([yearly_summary, yearly_total], ignore_index=True).to_excel(writer, sheet_name="Yearly Summary", index=False)
+
+        configured = {}
+        for rule in rules:
+            category = rule.get("category")
+            if category:
+                configured.setdefault(category, set()).update(rule.get("keywords", []))
+        configured_categories = pd.DataFrame([
+            {"category": category, "keywords": ", ".join(sorted(keywords))}
+            for category, keywords in sorted(configured.items(), key=lambda item: item[0].casefold())
+        ], columns=["category", "keywords"])
+        configured_categories.to_excel(writer, sheet_name="Configured Categories", index=False)
+
 class DataFrameModel(QAbstractTableModel):
     def __init__(self, columns, parent=None):
         super().__init__(parent)
@@ -170,7 +223,7 @@ class ExpenseWindow(QMainWindow):
         selection_controls.addWidget(select_all); selection_controls.addWidget(clear_all); selection_controls.addStretch()
         export_selection_layout.addLayout(selection_controls)
         layout.addWidget(export_selection, 1)
-        export = QPushButton("Export selected category totals to Excel…"); export.clicked.connect(self.export_statistics); layout.addWidget(export); return page
+        export = QPushButton("Export selected categories yearly report to Excel…"); export.clicked.connect(self.export_statistics); layout.addWidget(export); return page
 
     def choose_csv_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Import bank statements", "", "CSV files (*.csv)")
@@ -311,13 +364,17 @@ class ExpenseWindow(QMainWindow):
         if not categories:
             QMessageBox.warning(self, "No categories selected", "Select at least one category to export.")
             return
+        expenses = selected_expenses_for_export(self.store.dataframe, categories)
+        if expenses.empty:
+            QMessageBox.information(self, "No export data", "No expense transactions exist for the selected categories.")
+            return
 
-        path, _ = QFileDialog.getSaveFileName(self, "Export category totals", "expense_report.xlsx", "Excel files (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export yearly category report", "yearly_expense_report.xlsx", "Excel files (*.xlsx)")
         if not path:
             return
         try:
-            statistics_for_categories(self.stats_model.frame, categories).to_excel(path, index=False)
-        except OSError as error:
+            write_yearly_statistics_export(path, expenses, categories, self.categorizer.rules)
+        except (OSError, ValueError) as error:
             QMessageBox.critical(self, "Export failed", str(error))
 
     def _set_category_checks(self, check_state):

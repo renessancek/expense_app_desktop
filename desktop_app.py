@@ -102,9 +102,12 @@ def write_yearly_statistics_export(path, expenses, categories, rules):
 
         months = expenses["Month"].nunique()
         averages = expenses.groupby("category", as_index=False)["amount"].sum()
-        averages["average_per_month"] = averages["amount"] / months
+        averages["average_per_month"] = (averages["amount"] / months).round(2)
         averages = averages[["category", "average_per_month"]].sort_values("average_per_month", ascending=False)
         averages.to_excel(writer, sheet_name="Average Monthly Expenses", index=False)
+        average_sheet = writer.sheets["Average Monthly Expenses"]
+        for cell in average_sheet["B"][1:]:
+            cell.number_format = "#,##0.##"
 
         comparison = expenses.pivot_table(index="category", columns="Year", values="amount", aggfunc="sum", fill_value=0).reset_index()
         year_columns = [column for column in comparison.columns if column != "category"]

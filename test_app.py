@@ -71,3 +71,9 @@ class TestYearlyStatisticsExport(unittest.TestCase):
             self.assertEqual(monthly_totals["Month"].tolist(), ["2026-01", "2026-02", "2026-03", "GRAND TOTAL"])
             configured = pd.read_excel(path, sheet_name="Configured Categories")
             self.assertEqual(configured["category"].tolist(), ["Food", "Rent"])
+            from openpyxl import load_workbook
+            workbook = load_workbook(path, data_only=True)
+            averages_sheet = workbook["Average Monthly Expenses"]
+            self.assertEqual(averages_sheet["B2"].value, 26.67)
+            self.assertEqual(averages_sheet["B2"].number_format, "#,##0.##")
+            workbook.close()

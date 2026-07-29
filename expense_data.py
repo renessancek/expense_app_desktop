@@ -31,8 +31,14 @@ class ExpenseDataStore:
 
         self.transactions = []
         self.import_reports = []
-        self._load_files(self.scanner.scan_for_csvs(), "Scanned")
-        self._load_files(self.selected_files, "Imported")
+        scanned_files = self.scanner.scan_for_csvs()
+        self._load_files(scanned_files, "Scanned")
+        scanned_paths = {os.path.normcase(os.path.abspath(path)) for path in scanned_files}
+        imported_files = [
+            path for path in self.selected_files
+            if os.path.normcase(os.path.abspath(path)) not in scanned_paths
+        ]
+        self._load_files(imported_files, "Imported")
         return self.transactions
 
     def _load_files(self, paths, source):

@@ -34,3 +34,9 @@ class TestExpenseDataStore(unittest.TestCase):
 
     def test_reports_keep_the_import_source_file(self):
         self.assertEqual(self.store.import_reports[0]["File"], "scanned.csv")
+
+    def test_reload_does_not_import_a_scanned_file_twice_when_it_was_also_selected(self):
+        self.store.reload(["scanned.csv"])
+
+        self.assertEqual(len(self.store.transactions), 2)
+        self.assertEqual([transaction["source"] for transaction in self.store.transactions], ["Scanned", "Scanned"])

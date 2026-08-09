@@ -344,7 +344,9 @@ class ExpenseWindow(QMainWindow):
         export = QPushButton("Export selected categories yearly report to Excel…"); export.clicked.connect(self.export_statistics); layout.addWidget(export); return page
 
     def choose_csv_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "Import bank statements", "", "CSV files (*.csv)")
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Import bank statements", "", "CSV files (*.csv *.CSV);;All files (*)"
+        )
         if files: self.reload_transactions(files)
 
     def reload_transactions(self, selected_files=None):

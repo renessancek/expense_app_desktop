@@ -79,4 +79,4 @@ Das Ergebnis liegt anschließend unter `dist\Expense App Desktop\Expense App Des
 
 ## Daten
 
-Regeln und Backups bleiben im persönlichen Datenordner. Unter Windows ist das `%LOCALAPPDATA%\Expense App Desktop`; unter Linux `~/.local/share/expense-app-desktop` (oder der über `XDG_DATA_HOME` konfigurierte Ordner). Der Standardordner für Kontoauszüge ist unter Windows `Dokumente/BankStatements`, unter Linux `~/Documents/BankStatements`.
+Regeln und Backups bleiben im persönlichen Datenordner. Unter Windows ist das `%LOCALAPPDATA%\Expense App Desktop`; unter Linux `~/.local/share/expense-app-desktop` (oder der über `XDG_DATA_HOME` konfigurierte Ordner). Der Standardordner für Kontoauszüge ist `BankStatements` im persönlichen Dokumente-Ordner – unter Linux wird der XDG-Pfad verwendet (z. B. `~/Dokumente/BankStatements` auf deutschen Systemen, sonst `~/Documents/BankStatements`).

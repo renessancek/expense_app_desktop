@@ -51,6 +51,63 @@ class TestCategorizer(unittest.TestCase):
         with open(self.rules_path, encoding="utf-8") as rules_file:
             self.assertEqual(json.load(rules_file), {"rules": [{"category": "Groceries", "keywords": ["rewe"]}]})
 
+    def _write_import(self, name, content, encoding="utf-8"):
+        path = os.path.join(self.test_dir, name)
+        with open(path, "w", encoding=encoding, newline="") as handle:
+            handle.write(content)
+        return path
+
+    def test_import_csv_quoted_keywords_from_sheets(self):
+        path = self._write_import(
+            "rules.csv",
+            "category,keywords\nSupermarkt,\"rewe, aldi, lidl\"\nAmazon,amazon\n",
+        )
+        self.categorizer.import_rules_from_path(path)
+        self.assertEqual(self.categorizer.suggest_category("REWE sagt danke"), "Supermarkt")
+        self.assertEqual(self.categorizer.suggest_category("ALDI SUED"), "Supermarkt")
+        self.assertEqual(self.categorizer.suggest_category("AMAZON PRIME"), "Amazon")
+
+    def test_import_csv_wide_columns_and_long_format(self):
+        path = self._write_import(
+            "rules.csv",
+            "category,keyword,extra\nSupermarkt,rewe,aldi\nSupermarkt,lidl,\nAmazon,amzn,\n",
+        )
+        self.categorizer.import_rules_from_path(path)
+        self.assertEqual(
+            self.categorizer.rules,
+            [
+                {"category": "Supermarkt", "keywords": ["rewe", "aldi", "lidl"]},
+                {"category": "Amazon", "keywords": ["amzn"]},
+            ],
+        )
+
+    def test_import_german_semicolon_csv_with_kategorie_header(self):
+        path = self._write_import(
+            "regeln.csv",
+            "Kategorie;Stichwörter\nSupermarkt;rewe, aldi\nVersicherung;allianz\n",
+        )
+        self.categorizer.import_rules_from_path(path)
+        self.assertEqual(self.categorizer.suggest_category("rewe markt"), "Supermarkt")
+        self.assertEqual(self.categorizer.suggest_category("ALLIANZ VERS"), "Versicherung")
+
+    def test_import_headerless_csv_and_json_file(self):
+        csv_path = self._write_import("rules.csv", "Supermarkt,rewe,aldi\n")
+        self.categorizer.import_rules_from_path(csv_path)
+        self.assertEqual(self.categorizer.suggest_category("ALDI"), "Supermarkt")
+
+        json_path = self._write_import(
+            "rules.json",
+            json.dumps({"rules": [{"category": "Internet", "keywords": ["net"]}]}),
+        )
+        self.categorizer.import_rules_from_path(json_path)
+        self.assertEqual(self.categorizer.suggest_category("pay via net transfer"), "Internet")
+        self.assertEqual(self.categorizer.suggest_category("REWE"), "Sonstiges")
+
+    def test_import_csv_rejects_empty_keyword_table(self):
+        path = self._write_import("empty.csv", "category,keywords\n,\n")
+        with self.assertRaises(ValueError):
+            self.categorizer.import_rules_from_path(path)
+
 
 if __name__ == "__main__":
     unittest.main()

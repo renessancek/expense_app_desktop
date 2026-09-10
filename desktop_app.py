@@ -303,7 +303,7 @@ class ExpenseWindow(QMainWindow):
     def _category_tab(self):
         page = QWidget(); layout = QVBoxLayout(page)
         controls = QGridLayout(); self.rule_category, self.rule_keywords = QLineEdit(), QLineEdit()
-        add = QPushButton("Add / merge rule"); delete = QPushButton("Delete selected rule"); restore = QPushButton("Restore latest backup"); import_rules = QPushButton("Import rules.json…")
+        add = QPushButton("Add / merge rule"); delete = QPushButton("Delete selected rule"); restore = QPushButton("Restore latest backup"); import_rules = QPushButton("Import rules (CSV or JSON)…")
         controls.addWidget(QLabel("Category"), 0, 0); controls.addWidget(self.rule_category, 0, 1); controls.addWidget(QLabel("Keywords (comma separated)"), 1, 0); controls.addWidget(self.rule_keywords, 1, 1)
         controls.addWidget(add, 2, 0); controls.addWidget(delete, 2, 1); controls.addWidget(restore, 2, 2); controls.addWidget(import_rules, 2, 3); layout.addLayout(controls)
         add.clicked.connect(self.add_rule); delete.clicked.connect(self.delete_rule); restore.clicked.connect(self.restore_rules); import_rules.clicked.connect(self.import_rules_file)
@@ -595,11 +595,19 @@ class ExpenseWindow(QMainWindow):
         if success: self.reload_transactions()
 
     def import_rules_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import rules", "", "JSON files (*.json)")
-        if not path: return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import rules",
+            "",
+            "Rules files (*.csv *.json);;CSV files (*.csv);;JSON files (*.json);;All files (*)",
+        )
+        if not path:
+            return
         try:
-            self.categorizer.import_rules(json.loads(Path(path).read_text(encoding="utf-8"))); self.reload_transactions()
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error: QMessageBox.critical(self, "Import failed", str(error))
+            self.categorizer.import_rules_from_path(path)
+            self.reload_transactions()
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            QMessageBox.critical(self, "Import failed", str(error))
 
     def refresh_statistics(self):
         frame = self.store.dataframe

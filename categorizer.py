@@ -1,9 +1,133 @@
+import csv
 import datetime
+import io
 import json
 import os
 import re
 import shutil
 from app_paths import user_data_dir
+
+_CATEGORY_HEADERS = {"category", "kategorie", "cat"}
+_KEYWORD_HEADERS = {
+    "keyword",
+    "keywords",
+    "stichwort",
+    "stichworter",
+    "schluesselwort",
+    "schluesselworter",
+}
+
+
+def _read_import_text(path):
+    with open(path, "rb") as handle:
+        data = handle.read()
+    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("Could not decode the rules file.")
+
+
+def _normalize_header(value):
+    text = str(value or "").strip().lower()
+    return (
+        text.replace("ä", "a")
+        .replace("ö", "o")
+        .replace("ü", "u")
+        .replace("ß", "ss")
+    )
+
+
+def _detect_csv_delimiter(text):
+    first_line = next((line for line in text.splitlines() if line.strip()), "")
+    counts = {";": first_line.count(";"), ",": first_line.count(","), "\t": first_line.count("\t")}
+    if max(counts.values()) == 0:
+        return ","
+    return max(counts, key=counts.get)
+
+
+def _split_keyword_cell(value):
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [part.strip().lower() for part in re.split(r"[,;]", text) if part.strip()]
+
+
+def rules_from_csv(text):
+    """Parse a Sheets-style rules CSV into the JSON rules list."""
+    if not str(text or "").strip():
+        raise ValueError("The CSV file is empty.")
+
+    delimiter = _detect_csv_delimiter(text)
+    try:
+        rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
+    except csv.Error as error:
+        raise ValueError(f"Could not parse the CSV file: {error}") from error
+
+    rows = [[cell.strip() for cell in row] for row in rows if any(cell.strip() for cell in row)]
+    if not rows:
+        raise ValueError("The CSV file is empty.")
+
+    header = [_normalize_header(cell) for cell in rows[0]]
+    has_header = header[0] in _CATEGORY_HEADERS if header else False
+    data_rows = rows[1:] if has_header else rows
+
+    if has_header:
+        try:
+            category_index = next(index for index, name in enumerate(header) if name in _CATEGORY_HEADERS)
+        except StopIteration:
+            category_index = 0
+        keyword_indexes = [index for index, name in enumerate(header) if name in _KEYWORD_HEADERS]
+        extra_indexes = [
+            index
+            for index in range(len(header))
+            if index != category_index and index not in keyword_indexes
+        ]
+        keyword_indexes = keyword_indexes + extra_indexes
+        if not keyword_indexes:
+            keyword_indexes = list(range(category_index + 1, len(header)))
+    else:
+        category_index = 0
+        keyword_indexes = None
+
+    by_category = {}
+    for row in data_rows:
+        if category_index >= len(row):
+            continue
+        category = row[category_index].strip()
+        if not category:
+            continue
+        if _normalize_header(category) in _CATEGORY_HEADERS:
+            continue
+
+        if keyword_indexes is None:
+            cells = row[category_index + 1 :]
+        else:
+            cells = [row[index] for index in keyword_indexes if index < len(row)]
+            if len(row) > len(header):
+                cells.extend(row[len(header) :])
+
+        keywords = []
+        for cell in cells:
+            for keyword in _split_keyword_cell(cell):
+                if keyword not in keywords:
+                    keywords.append(keyword)
+        if not keywords:
+            continue
+
+        existing = by_category.setdefault(category, [])
+        for keyword in keywords:
+            if keyword not in existing:
+                existing.append(keyword)
+
+    if not by_category:
+        raise ValueError(
+            "The CSV file needs a category column and at least one keyword. "
+            "Use headers like category,keywords or one keyword per extra column."
+        )
+
+    return [{"category": category, "keywords": keywords} for category, keywords in by_category.items()]
 
 class Categorizer:
     def __init__(self, rules_path=None):
@@ -101,6 +225,21 @@ class Categorizer:
             for rule in rules
         ]
         self._persist_rules()
+
+    def import_rules_from_path(self, path):
+        """Replace all global rules from a JSON or CSV file."""
+        raw = _read_import_text(path)
+        stripped = raw.lstrip()
+        suffix = os.path.splitext(path)[1].lower()
+        looks_like_json = stripped.startswith("{") or stripped.startswith("[")
+        if suffix == ".json" or looks_like_json:
+            try:
+                self.import_rules(json.loads(raw))
+                return
+            except json.JSONDecodeError:
+                if looks_like_json:
+                    raise
+        self.import_rules({"rules": rules_from_csv(raw)})
 
     def suggest_category(self, description):
         desc = description.lower()

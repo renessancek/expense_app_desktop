@@ -34,6 +34,71 @@ class TestStatisticsExportSelection(unittest.TestCase):
 
         self.assertTrue(statistics_for_categories(totals, []).empty)
 
+
+@unittest.skipIf(pd is None, "pandas is not installed")
+class TestListedAmountSum(unittest.TestCase):
+
+    def test_sums_all_filtered_amounts_without_adding_a_column(self):
+        from desktop_app import format_listed_amount_sum, listed_amount_sum
+
+        frame = pd.DataFrame({
+            "date": ["2026-07-01", "2026-07-02", "2026-07-03"],
+            "amount": [-10.0, -20.5, 5.0],
+        })
+
+        self.assertEqual(listed_amount_sum(frame), -25.5)
+        self.assertEqual(format_listed_amount_sum(-25.5), "Sum of listed transactions: -25.50 €")
+        self.assertEqual(list(frame.columns), ["date", "amount"])
+
+    def test_empty_or_missing_amount_is_zero(self):
+        from desktop_app import listed_amount_sum
+
+        self.assertEqual(listed_amount_sum(pd.DataFrame()), 0.0)
+        self.assertEqual(listed_amount_sum(pd.DataFrame({"description": ["x"]})), 0.0)
+
+
+try:
+    from PySide6.QtWidgets import QApplication, QTableView
+except ImportError:
+    QApplication = None
+
+
+@unittest.skipIf(pd is None or QApplication is None, "pandas or PySide6 is not installed")
+class TestTransactionListSumFooter(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_sum_sits_under_the_rows_and_follows_the_filtered_list(self):
+        from desktop_app import ExpenseWindow
+
+        window = ExpenseWindow()
+        try:
+            self.assertNotIn("Sum", ExpenseWindow.TABLE_COLUMNS)
+            self.assertNotIn("Source", ExpenseWindow.TABLE_COLUMNS)
+            self.assertNotIn("source", ExpenseWindow.FRAME_COLUMNS)
+            self.assertEqual(window.transaction_table.model().columnCount(), len(ExpenseWindow.TABLE_COLUMNS))
+
+            layout = window.transaction_table.parentWidget().layout()
+            widgets = [layout.itemAt(index).widget() for index in range(layout.count()) if layout.itemAt(index).widget()]
+            self.assertGreater(widgets.index(window.list_sum_label), widgets.index(window.transaction_table))
+            self.assertIsInstance(window.transaction_table, QTableView)
+
+            window.store.transactions = [
+                {"date": "01.07.2026", "description": "Market", "amount": -10.0, "category": "Food", "file": "a.csv"},
+                {"date": "02.07.2026", "description": "Landlord", "amount": -20.0, "category": "Rent", "file": "a.csv"},
+            ]
+            window.store.import_reports = []
+            window.search_input.setText("Market")
+            window.refresh_transactions()
+            self.assertEqual(window.list_sum_label.text(), "Sum of listed transactions: -10.00 €")
+        finally:
+            window.close()
+
 @unittest.skipIf(pd is None, "pandas is not installed")
 class TestYearlyStatisticsExport(unittest.TestCase):
 

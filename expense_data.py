@@ -32,16 +32,16 @@ class ExpenseDataStore:
         self.transactions = []
         self.import_reports = []
         scanned_files = self.scanner.scan_for_csvs()
-        self._load_files(scanned_files, "Scanned")
+        self._load_files(scanned_files)
         scanned_paths = {os.path.normcase(os.path.abspath(path)) for path in scanned_files}
         imported_files = [
             path for path in self.selected_files
             if os.path.normcase(os.path.abspath(path)) not in scanned_paths
         ]
-        self._load_files(imported_files, "Imported")
+        self._load_files(imported_files)
         return self.transactions
 
-    def _load_files(self, paths, source):
+    def _load_files(self, paths):
         for path in paths:
             transactions, report = self.parser.parse_bank_statement_with_report(path)
             report["File"] = os.path.basename(str(path))
@@ -49,14 +49,13 @@ class ExpenseDataStore:
             for transaction in transactions:
                 transaction = dict(transaction)
                 transaction["file"] = os.path.basename(str(path))
-                transaction["source"] = source
                 transaction["category"] = self.categorizer.suggest_category(transaction["description"])
                 self.transactions.append(transaction)
 
     @property
     def dataframe(self):
         if not self.transactions:
-            return pd.DataFrame(columns=["date", "description", "amount", "category", "file", "source"])
+            return pd.DataFrame(columns=["date", "description", "amount", "category", "file"])
         frame = pd.DataFrame(self.transactions).copy()
         frame["date"] = pd.to_datetime(frame["date"], dayfirst=True, format="mixed")
         frame["Month"] = frame["date"].dt.strftime("%Y-%m")

@@ -39,4 +39,4 @@ class TestExpenseDataStore(unittest.TestCase):
         self.store.reload(["scanned.csv"])
 
         self.assertEqual(len(self.store.transactions), 2)
-        self.assertEqual([transaction["source"] for transaction in self.store.transactions], ["Scanned", "Scanned"])
+        self.assertTrue(all("source" not in transaction for transaction in self.store.transactions))

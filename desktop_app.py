@@ -27,6 +27,18 @@ def statistics_for_categories(totals, categories):
     return totals[totals["Category"].isin(categories)].copy()
 
 
+def listed_amount_sum(frame):
+    """Return the numeric sum of amounts in a filtered transaction list."""
+    if frame is None or getattr(frame, "empty", True) or "amount" not in frame.columns:
+        return 0.0
+    return float(pd.to_numeric(frame["amount"], errors="coerce").fillna(0).sum())
+
+
+def format_listed_amount_sum(total):
+    """Format the list-view footer that sits under the transaction rows."""
+    return f"Sum of listed transactions: {total:.2f} €"
+
+
 DEFAULT_UNSELECTED_EXPORT_CATEGORIES = {"Abhebung", "Investments", "Firma", "Privat", "Paypal"}
 
 
@@ -45,7 +57,7 @@ def transaction_details_dialog(parent, row):
     layout.addWidget(description, 1)
     details = QFormLayout()
     details.addRow("Category:", QLabel(str(row["Category"])))
-    details.addRow("Source:", QLabel(f"{row['Source']} ({row['File']})"))
+    details.addRow("File:", QLabel(str(row["File"])))
     layout.addLayout(details)
     close = QPushButton("Close")
     close.clicked.connect(dialog.accept)
@@ -217,14 +229,13 @@ class RuleTableModel(DataFrameModel):
 
 class ExpenseWindow(QMainWindow):
     PAGE_SIZE = 20
-    TABLE_COLUMNS = ["Date", "Description", "Amount", "Category", "Source", "File"]
-    FRAME_COLUMNS = ["date", "description", "amount", "category", "source", "file"]
+    TABLE_COLUMNS = ["Date", "Description", "Amount", "Category", "File"]
+    FRAME_COLUMNS = ["date", "description", "amount", "category", "file"]
     TRANSACTION_COLUMN_LIMITS = {
         "Date": (105, 135),
         "Description": (230, 700),
         "Amount": (105, 135),
         "Category": (150, 260),
-        "Source": (140, 240),
         "File": (170, 340),
     }
 
@@ -276,6 +287,10 @@ class ExpenseWindow(QMainWindow):
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.sectionClicked.connect(self.change_sort)
         self.transaction_table.doubleClicked.connect(self.show_transaction_details); layout.addWidget(self.transaction_table, 1)
+        self.list_sum_label = QLabel()
+        self.list_sum_label.setObjectName("list_sum_label")
+        self.list_sum_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(self.list_sum_label)
         pagination = QHBoxLayout(); self.previous = QPushButton("Previous"); self.next = QPushButton("Next")
         self.page_spin = QSpinBox(); self.page_spin.setMinimum(1); self.page_label = QLabel()
         self.previous.clicked.connect(lambda: self.set_page(self.page - 1)); self.next.clicked.connect(lambda: self.set_page(self.page + 1)); self.page_spin.valueChanged.connect(self.set_page)
@@ -395,6 +410,7 @@ class ExpenseWindow(QMainWindow):
         start = (self.page - 1) * self.PAGE_SIZE; display = frame.iloc[start:start + self.PAGE_SIZE]
         shown = display.rename(columns=dict(zip(self.FRAME_COLUMNS, self.TABLE_COLUMNS)))
         self.transaction_model.set_frame(shown); self._install_description_editors(); self._schedule_transaction_column_resize(); self.result_label.setText(f"Showing {start + 1 if total else 0}–{min(start + self.PAGE_SIZE, total)} of {total} transactions")
+        self.list_sum_label.setText(format_listed_amount_sum(listed_amount_sum(frame)))
         self.page_label.setText(f"of {pages}"); self.previous.setEnabled(self.page > 1); self.next.setEnabled(self.page < pages)
         full = self.store.dataframe; self.total_label.setText(f"Total transactions: {len(full)}"); self.spent_label.setText(f"Total spent: {abs(full.loc[full['amount'] < 0, 'amount'].sum()):.2f} €")
         self.categorized_label.setText(f"Categorized: {(full['category'] != 'Sonstiges').sum()}")
@@ -541,7 +557,7 @@ class ExpenseWindow(QMainWindow):
             widths.append(max(minimum, min(content_width, maximum)))
 
         remaining_width = max(0, available_width - sum(widths))
-        for column in ("Description", "File", "Source"):
+        for column in ("Description", "File"):
             if not remaining_width:
                 break
             index = self.TABLE_COLUMNS.index(column)

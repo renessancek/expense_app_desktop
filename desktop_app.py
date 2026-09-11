@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QTimer, Qt, Signal
-from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QFormLayout,
     QGridLayout, QGroupBox, QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
@@ -255,9 +254,6 @@ class ExpenseWindow(QMainWindow):
         tabs.addTab(self._category_tab(), "Categories")
         tabs.addTab(self._statistics_tab(), "Statistics")
         self.setCentralWidget(tabs)
-        refresh = QAction("Reload CSVs", self)
-        refresh.triggered.connect(self.reload_folder_csvs)
-        self.menuBar().addAction(refresh)
 
     def _transaction_tab(self):
         page = QWidget(); layout = QVBoxLayout(page)

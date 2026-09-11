@@ -1,17 +1,17 @@
 # Expense App Desktop
 
-Eine browserfreie, lokale Desktop-Anwendung zum Einlesen, Kategorisieren und Auswerten von Kontoauszugs-CSV-Dateien. Die Oberfläche läuft nativ mit PySide6 – kein Browser und kein lokaler Webserver werden gestartet.
+A local, browser-free desktop app for importing, categorizing, and reviewing bank-statement CSV files. The UI is native PySide6 — no browser and no local web server.
 
-## Funktionen
+## Features
 
-- CSV-Dateien aus `Dokumente/BankStatements` scannen oder manuell importieren
-- Transaktionstabelle mit Sortierung, Paginierung sowie Kategorie-, Monats- und Live-Textsuche
-- Regeln importieren, anlegen, löschen und aus Sicherungen wiederherstellen
-- Kategorien summieren und als Excel-Datei exportieren
+- Scan CSV files from `Documents/BankStatements` or import them manually
+- Transaction table with sorting, pagination, and category, month, and live text filters
+- Import, create, delete, and restore rules from backups
+- Sum categories and export them as an Excel file
 
 ## Windows 10/11
 
-### Einrichten und starten
+### Set up and run
 
 ```powershell
 py -3 -m venv .venv
@@ -19,29 +19,29 @@ py -3 -m venv .venv
 .\start_expense_app.ps1
 ```
 
-Für einen Startmenü-Eintrag:
+For a Start menu entry:
 
 ```powershell
 .\install_windows_app.ps1
 ```
 
-Für Autostart bei der Anmeldung:
+To start the app at login:
 
 ```powershell
 .\install_windows_app.ps1 -EnableAutostart
 ```
 
-Zum Entfernen der Startmenü- und Autostart-Verknüpfung:
+To remove the Start menu and autostart shortcuts:
 
 ```powershell
 .\uninstall_windows_app.ps1
 ```
 
-Die Anwendung öffnet ein natives Desktop-Fenster. Es wird kein Browser gestartet.
+The app opens a native desktop window. No browser is started.
 
 ## Ubuntu/Linux
 
-### Einrichten und starten
+### Set up and run
 
 ```bash
 python3 -m venv .venv
@@ -50,43 +50,75 @@ chmod +x start_expense_app.sh install_ubuntu_app.sh
 ./start_expense_app.sh
 ```
 
-Für einen Eintrag im Anwendungsmenü:
+For an application-menu entry:
 
 ```bash
 ./install_ubuntu_app.sh
 ```
 
-Für Autostart den absoluten Pfad zu `start_expense_app.sh` in den Systemeinstellungen unter **Startup Applications** hinterlegen.
+For autostart, add the absolute path to `start_expense_app.sh` under **Startup Applications** in system settings.
 
-Zum Entfernen des Anwendungsmenü-Eintrags:
+To remove the application-menu entry:
 
 ```bash
 chmod +x uninstall_ubuntu_app.sh
 ./uninstall_ubuntu_app.sh
 ```
 
-Auch unter Ubuntu läuft die Anwendung nativ mit PySide6 und benötigt keinen Browser oder lokalen Webserver.
+On Ubuntu the app also runs natively with PySide6 and does not need a browser or a local web server.
 
-## EXE-Paket erstellen
+### Optional Tesseract (OCR)
 
-Nach der Installation der Abhängigkeiten:
+Photos and scanned PDFs need the `tesseract` binary on `PATH` (languages `deu` and `eng`). Digital PDFs with a text layer work without Tesseract.
+
+If the host should not or cannot install Tesseract itself (immutable distros, no `pacman`/`apt`), set it up with Distrobox: [install-tesseract-linux-distrobox.md](install-tesseract-linux-distrobox.md).
+
+## Build a Windows EXE
+
+After installing dependencies:
 
 ```powershell
 .\build_windows_exe.ps1
 ```
 
-Das Ergebnis liegt anschließend unter `dist\Expense App Desktop\Expense App Desktop.exe`.
+The result is `dist\Expense App Desktop\Expense App Desktop.exe`.
 
-## Daten
+## Data
 
-Regeln und Backups bleiben im persönlichen Datenordner. Unter Windows ist das `%LOCALAPPDATA%\Expense App Desktop`; unter Linux `~/.local/share/expense-app-desktop` (oder der über `XDG_DATA_HOME` konfigurierte Ordner). Der Standardordner für Kontoauszüge ist `BankStatements` im persönlichen Dokumente-Ordner – unter Linux wird der XDG-Pfad verwendet (z. B. `~/Dokumente/BankStatements` auf deutschen Systemen, sonst `~/Documents/BankStatements`).
+Rules and backups stay in the personal data directory. On Windows that is `%LOCALAPPDATA%\Expense App Desktop`; on Linux `~/.local/share/expense-app-desktop` (or the folder configured via `XDG_DATA_HOME`). The default folder for bank statements is `BankStatements` in the personal Documents folder — on Linux the XDG path is used (for example `~/Dokumente/BankStatements` on German systems, otherwise `~/Documents/BankStatements`).
 
-Die App speichert Regeln intern weiterhin als `rules.json`. Beim Import werden JSON **und** CSV akzeptiert, z. B. ein Google-Sheets-Export (Datei → Herunterladen → CSV). Eine Tabelle mit `category`/`kategorie` und `keywords`/`keyword` reicht:
+The app still stores rules internally as `rules.json`. Import accepts JSON **and** CSV, for example a Google Sheets export (File → Download → CSV). A table with `category`/`kategorie` and `keywords`/`keyword` is enough.
 
+Ready-to-import examples live in [`rules/`](rules/): [`rules/rules.json`](rules/rules.json) and [`rules/rules.csv`](rules/rules.csv).
+
+JSON (`rules.json`):
+
+```json
+{
+  "rules": [
+    {
+      "category": "Supermarkt",
+      "keywords": ["rewe", "aldi", "lidl"]
+    },
+    {
+      "category": "Amazon",
+      "keywords": ["amazon"]
+    },
+    {
+      "category": "Internet",
+      "keywords": ["telekom", "vodafone"]
+    }
+  ]
+}
 ```
+
+CSV (`rules.csv`):
+
+```csv
 category,keywords
 Supermarkt,"rewe, aldi, lidl"
 Amazon,amazon
+Internet,"telekom, vodafone"
 ```
 
-Statt einer Keywords-Spalte können die Keywords auch in eigenen Spalten stehen, oder jede Zeile enthält nur ein Keyword. Semikolon-getrennte deutsche CSV-Exporte funktionieren ebenfalls.
+Instead of a keywords column, keywords can sit in their own columns, or each row can hold a single keyword. Semicolon-separated German CSV exports work too.

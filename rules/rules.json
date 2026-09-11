@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "category": "Supermarkt",
+      "keywords": ["rewe", "aldi", "lidl"]
+    },
+    {
+      "category": "Amazon",
+      "keywords": ["amazon"]
+    },
+    {
+      "category": "Internet",
+      "keywords": ["telekom", "vodafone"]
+    }
+  ]
+}

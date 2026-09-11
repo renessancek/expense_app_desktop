@@ -21,6 +21,11 @@ backups/
 *.xlsx
 *.exe
 
+# Example files shipped in the repo
+!rules/
+!rules/rules.json
+!rules/rules.csv
+
 # OS junk
 .DS_Store
 .aider*

@@ -103,6 +103,55 @@ class TestTransactionListSumFooter(unittest.TestCase):
         finally:
             window.close()
 
+    def test_receipts_tab_is_present(self):
+        from desktop_app import ExpenseWindow
+
+        window = ExpenseWindow()
+        try:
+            titles = [window.tabs.tabText(index) for index in range(window.tabs.count())]
+            self.assertEqual(titles[0], "Transactions")
+            self.assertEqual(titles[1], "Receipts")
+            self.assertIsNotNone(window.findChild(type(window.receipt_extract_button), "receipt_extract_button"))
+            self.assertFalse(window.receipt_extract_button.isEnabled())
+        finally:
+            window.close()
+
+    def test_receipt_extract_dialog_fills_from_fixture(self):
+        from PySide6.QtWidgets import QLabel, QTextEdit
+
+        from desktop_app import ExpenseWindow, receipt_extract_dialog
+
+        window = ExpenseWindow()
+        try:
+            result = {
+                "merchant": "REWE",
+                "merchant_category": "Supermarkt",
+                "date": "2026-05-12",
+                "currency": "EUR",
+                "subtotal": 1.29,
+                "tax": 0.08,
+                "total": 1.29,
+                "notes": "Test note",
+                "raw_text": "REWE\nVollmilch 1L 1,29",
+                "items": [{
+                    "description": "Vollmilch 1L",
+                    "quantity": 1.0,
+                    "amount": 1.29,
+                    "category": "Supermarkt",
+                }],
+            }
+            dialog = receipt_extract_dialog(window, result)
+            notes = dialog.findChild(QLabel, "receipt_notes")
+            raw = dialog.findChild(QTextEdit, "receipt_raw_json")
+            table = dialog.findChild(QTableView, "receipt_items_table")
+            self.assertEqual(notes.text(), "Test note")
+            self.assertIn("REWE", raw.toPlainText())
+            self.assertIn("Vollmilch 1L", raw.toPlainText())
+            self.assertEqual(table.model().rowCount(), 1)
+            self.assertEqual(table.model().data(table.model().index(0, 0)), "Vollmilch 1L")
+        finally:
+            window.close()
+
 @unittest.skipIf(pd is None, "pandas is not installed")
 class TestYearlyStatisticsExport(unittest.TestCase):
 

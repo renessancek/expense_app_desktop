@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QTimer, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, QThread, QTimer, Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QFormLayout,
     QGridLayout, QGroupBox, QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
 from categorizer import Categorizer
 from expense_data import ExpenseDataStore
 from parser import Parser
+from receipt_extractor import ReceiptExtractError, extract_receipt, format_receipt_debug, render_pdf_page_ppm
 from scanner import Scanner
 
 
@@ -62,6 +64,81 @@ def transaction_details_dialog(parent, row):
     close.clicked.connect(dialog.accept)
     layout.addWidget(close)
     return dialog
+
+
+def _receipt_display(value, fallback="—"):
+    if value is None or value == "":
+        return fallback
+    return str(value)
+
+
+def receipt_extract_dialog(parent, result):
+    """Show extracted receipt fields, line items, and raw text for testing."""
+    result = result or {}
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Receipt extract")
+    dialog.setMinimumSize(640, 520)
+    layout = QVBoxLayout(dialog)
+    details = QFormLayout()
+    details.addRow("Merchant:", QLabel(_receipt_display(result.get("merchant"))))
+    details.addRow("Merchant category:", QLabel(_receipt_display(result.get("merchant_category"))))
+    details.addRow("Date:", QLabel(_receipt_display(result.get("date"))))
+    total = result.get("total")
+    total_text = f"{total:.2f}" if isinstance(total, (int, float)) else _receipt_display(total)
+    details.addRow("Total:", QLabel(total_text))
+    details.addRow("Currency:", QLabel(_receipt_display(result.get("currency"))))
+    notes = QLabel(_receipt_display(result.get("notes"), "None"))
+    notes.setWordWrap(True)
+    notes.setObjectName("receipt_notes")
+    details.addRow("Notes:", notes)
+    layout.addLayout(details)
+
+    items = result.get("items") or []
+    item_frame = pd.DataFrame(items, columns=["description", "quantity", "amount", "category"])
+    item_frame = item_frame.rename(columns={
+        "description": "Description",
+        "quantity": "Qty",
+        "amount": "Amount",
+        "category": "Category",
+    })
+    model = DataFrameModel(["Description", "Qty", "Amount", "Category"], dialog)
+    model.set_frame(item_frame)
+    table = QTableView()
+    table.setObjectName("receipt_items_table")
+    table.setModel(model)
+    table.setEditTriggers(QTableView.NoEditTriggers)
+    layout.addWidget(table, 1)
+
+    raw = QTextEdit()
+    raw.setObjectName("receipt_raw_json")
+    raw.setReadOnly(True)
+    raw.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+    raw.setPlainText(format_receipt_debug(result))
+    layout.addWidget(raw, 1)
+    close = QPushButton("Close")
+    close.clicked.connect(dialog.accept)
+    layout.addWidget(close)
+    return dialog
+
+
+class ReceiptExtractWorker(QObject):
+    """Run local receipt extraction off the UI thread."""
+
+    finished = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, path, categorizer):
+        super().__init__()
+        self.path = path
+        self.categorizer = categorizer
+
+    def run(self):
+        try:
+            self.finished.emit(extract_receipt(self.path, self.categorizer))
+        except ReceiptExtractError as error:
+            self.failed.emit(str(error))
+        except Exception as error:
+            self.failed.emit(f"Could not extract the receipt: {error}")
 
 
 class DescriptionLineEdit(QLineEdit):
@@ -243,17 +320,21 @@ class ExpenseWindow(QMainWindow):
         self.scanner, self.parser, self.categorizer = Scanner(), Parser(), Categorizer()
         self.store = ExpenseDataStore(self.scanner, self.parser, self.categorizer)
         self.page, self.sort_column, self.sort_descending = 1, "date", True
+        self.receipt_path = None
+        self._receipt_thread = None
+        self._receipt_worker = None
         self.setWindowTitle("Expense App Desktop")
         self.resize(1300, 820)
         self._build_ui()
         self.reload_transactions()
 
     def _build_ui(self):
-        tabs = QTabWidget()
-        tabs.addTab(self._transaction_tab(), "Transactions")
-        tabs.addTab(self._category_tab(), "Categories")
-        tabs.addTab(self._statistics_tab(), "Statistics")
-        self.setCentralWidget(tabs)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self._transaction_tab(), "Transactions")
+        self.tabs.addTab(self._receipt_tab(), "Receipts")
+        self.tabs.addTab(self._category_tab(), "Categories")
+        self.tabs.addTab(self._statistics_tab(), "Statistics")
+        self.setCentralWidget(self.tabs)
 
     def _transaction_tab(self):
         page = QWidget(); layout = QVBoxLayout(page)
@@ -311,6 +392,44 @@ class ExpenseWindow(QMainWindow):
         layout.addWidget(self.import_results_group)
         return page
 
+    def _receipt_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        intro = QLabel(
+            "Pick a receipt image or PDF, extract it locally, and inspect the result in a popup. "
+            "Nothing is saved. Digital PDFs with a text layer work without extra software; "
+            "photos and scanned PDFs need Tesseract on PATH for OCR."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        controls = QHBoxLayout()
+        self.receipt_choose_button = QPushButton("Choose file…")
+        self.receipt_choose_button.setObjectName("receipt_choose_button")
+        self.receipt_choose_button.clicked.connect(self.choose_receipt_file)
+        self.receipt_extract_button = QPushButton("Extract")
+        self.receipt_extract_button.setObjectName("receipt_extract_button")
+        self.receipt_extract_button.clicked.connect(self.extract_selected_receipt)
+        self.receipt_extract_button.setEnabled(False)
+        controls.addWidget(self.receipt_choose_button)
+        controls.addWidget(self.receipt_extract_button)
+        controls.addStretch()
+        layout.addLayout(controls)
+        self.receipt_path_label = QLabel("No file selected.")
+        self.receipt_path_label.setObjectName("receipt_path_label")
+        self.receipt_path_label.setWordWrap(True)
+        layout.addWidget(self.receipt_path_label)
+        self.receipt_preview = QLabel()
+        self.receipt_preview.setObjectName("receipt_preview")
+        self.receipt_preview.setAlignment(Qt.AlignCenter)
+        self.receipt_preview.setMinimumHeight(280)
+        self.receipt_preview.setText("Preview")
+        layout.addWidget(self.receipt_preview, 1)
+        self.receipt_status = QLabel("")
+        self.receipt_status.setObjectName("receipt_status")
+        self.receipt_status.setWordWrap(True)
+        layout.addWidget(self.receipt_status)
+        return page
+
     def _category_tab(self):
         page = QWidget(); layout = QVBoxLayout(page)
         controls = QGridLayout(); self.rule_category, self.rule_keywords = QLineEdit(), QLineEdit()
@@ -359,6 +478,73 @@ class ExpenseWindow(QMainWindow):
             self, "Import bank statements", "", "CSV files (*.csv *.CSV);;All files (*)"
         )
         if files: self.reload_transactions(files)
+
+    def choose_receipt_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose receipt",
+            "",
+            "Images and PDFs (*.png *.jpg *.jpeg *.webp *.bmp *.pdf);;All files (*)",
+        )
+        if not path:
+            return
+        self.receipt_path = path
+        self.receipt_path_label.setText(path)
+        self.receipt_extract_button.setEnabled(True)
+        self.receipt_status.setText("")
+        self._set_receipt_preview(path)
+
+    def _set_receipt_preview(self, path):
+        pixmap = QPixmap()
+        suffix = Path(path).suffix.lower()
+        try:
+            if suffix == ".pdf":
+                pixmap.loadFromData(render_pdf_page_ppm(path, 0, scale=1.5))
+            else:
+                pixmap.load(path)
+        except Exception as error:
+            self.receipt_preview.setPixmap(QPixmap())
+            self.receipt_preview.setText(f"Could not preview this file: {error}")
+            return
+        if pixmap.isNull():
+            self.receipt_preview.setPixmap(QPixmap())
+            self.receipt_preview.setText("No preview for this file.")
+            return
+        self.receipt_preview.setPixmap(
+            pixmap.scaled(self.receipt_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+
+    def extract_selected_receipt(self):
+        if not self.receipt_path:
+            QMessageBox.warning(self, "Receipt extract", "Choose a receipt file first.")
+            return
+        if self._receipt_thread is not None and self._receipt_thread.isRunning():
+            return
+        self.receipt_extract_button.setEnabled(False)
+        self.receipt_choose_button.setEnabled(False)
+        self.receipt_status.setText("Extracting locally…")
+        self._receipt_thread = QThread(self)
+        self._receipt_worker = ReceiptExtractWorker(self.receipt_path, self.categorizer)
+        self._receipt_worker.moveToThread(self._receipt_thread)
+        self._receipt_thread.started.connect(self._receipt_worker.run)
+        self._receipt_worker.finished.connect(self._receipt_extract_finished)
+        self._receipt_worker.failed.connect(self._receipt_extract_failed)
+        self._receipt_worker.finished.connect(self._receipt_thread.quit)
+        self._receipt_worker.failed.connect(self._receipt_thread.quit)
+        self._receipt_thread.finished.connect(self._receipt_worker.deleteLater)
+        self._receipt_thread.start()
+
+    def _receipt_extract_finished(self, result):
+        self.receipt_extract_button.setEnabled(True)
+        self.receipt_choose_button.setEnabled(True)
+        self.receipt_status.setText("Extracted locally. Nothing was saved.")
+        receipt_extract_dialog(self, result).exec()
+
+    def _receipt_extract_failed(self, message):
+        self.receipt_extract_button.setEnabled(True)
+        self.receipt_choose_button.setEnabled(True)
+        self.receipt_status.setText(message)
+        QMessageBox.warning(self, "Receipt extract", message)
 
     def reload_transactions(self, selected_files=None):
         self.store.reload(selected_files); self.scan_label.setText(f"Scanning folder: {self.scanner.watch_path}")

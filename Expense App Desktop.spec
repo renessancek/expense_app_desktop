@@ -2,8 +2,8 @@
 
 
 a = Analysis(
-    ['desktop_app.py'],
-    pathex=[],
+    ['src/desktop_app.py'],
+    pathex=['src'],
     binaries=[],
     datas=[('assets', 'assets')],
     hiddenimports=[],

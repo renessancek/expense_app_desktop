@@ -75,7 +75,7 @@ If the host should not or cannot install Tesseract itself (immutable distros, no
 
 ## Tests
 
-Unit tests live in [`tests/`](tests/). From the project root, with the virtualenv active:
+Application code lives in [`src/`](src/). Unit tests live in [`tests/`](tests/). From the project root, with the virtualenv active:
 
 ```bash
 python -m unittest discover -s tests -t .

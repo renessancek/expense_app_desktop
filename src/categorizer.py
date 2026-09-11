@@ -140,14 +140,18 @@ class Categorizer:
         self.load_rules()
 
     def _migrate_legacy_rules(self):
-        legacy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rules.json')
         if os.path.exists(self.rules_path):
             return
-        if not os.path.exists(legacy_path):
-            return
 
-        os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
-        shutil.copy2(legacy_path, self.rules_path)
+        here = os.path.dirname(os.path.abspath(__file__))
+        for legacy_path in (
+            os.path.join(here, 'rules.json'),
+            os.path.join(os.path.dirname(here), 'rules.json'),
+        ):
+            if os.path.exists(legacy_path):
+                os.makedirs(os.path.dirname(os.path.abspath(self.rules_path)), exist_ok=True)
+                shutil.copy2(legacy_path, self.rules_path)
+                return
 
     def load_rules(self):
         if os.path.exists(self.rules_path):

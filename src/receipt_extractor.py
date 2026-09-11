@@ -15,6 +15,7 @@ MAX_PAGES = 4
 MIN_PAGE_CHARS = 12
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 PDF_SUFFIX = ".pdf"
+RECEIPT_SUFFIXES = IMAGE_SUFFIXES | {PDF_SUFFIX}
 
 _AMOUNT_TOKEN = r"-?\d{1,3}(?:\.\d{3})+,\d{2}|-?\d+,\d{2}|-?\d+\.\d{2}"
 _AMOUNT_RE = re.compile(rf"(?<![\d.,])({_AMOUNT_TOKEN})(?![\d.,])")
@@ -91,6 +92,68 @@ def extract_receipt(path, categorizer=None):
     parsed["raw_text"] = raw_text
     attach_categories(parsed, categorizer)
     return parsed
+
+
+def list_receipt_files(folder):
+    """Return receipt image and PDF paths in a folder, sorted by name."""
+    folder = Path(folder)
+    try:
+        is_dir = folder.is_dir()
+    except OSError as error:
+        raise ReceiptExtractError(f"Could not read folder: {error}") from error
+    if not is_dir:
+        raise ReceiptExtractError(f"Could not read folder: {folder}")
+    return sorted(
+        path
+        for path in folder.iterdir()
+        if path.is_file() and path.suffix.lower() in RECEIPT_SUFFIXES
+    )
+
+
+def receipt_import_row(path, result=None, error=None):
+    """Build a folder-import list row from an extract result or failure."""
+    path = Path(path)
+    if error:
+        return {
+            "path": str(path),
+            "file": path.name,
+            "status": "Failed",
+            "error": str(error),
+            "merchant": None,
+            "date": None,
+            "total": None,
+            "item_count": 0,
+            "result": None,
+        }
+    result = result or {}
+    return {
+        "path": str(path),
+        "file": path.name,
+        "status": "Extracted",
+        "error": "",
+        "merchant": result.get("merchant"),
+        "date": result.get("date"),
+        "total": result.get("total"),
+        "item_count": len(result.get("items") or []),
+        "result": result,
+    }
+
+
+def extract_receipt_folder(folder, categorizer=None, progress=None):
+    """Extract every receipt file in a folder. Per-file failures stay in the list."""
+    files = list_receipt_files(folder)
+    rows = []
+    total = len(files)
+    for index, path in enumerate(files, 1):
+        if progress:
+            progress(index, total, path.name)
+        try:
+            rows.append(receipt_import_row(path, result=extract_receipt(path, categorizer)))
+        except ReceiptExtractError as error:
+            rows.append(receipt_import_row(path, error=error))
+        except Exception as error:
+            rows.append(receipt_import_row(path, error=f"Could not extract the receipt: {error}"))
+    return rows
 
 
 def extract_pdf_text(path):

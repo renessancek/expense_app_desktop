@@ -12,6 +12,8 @@ from receipt_extractor import (
     ReceiptExtractError,
     attach_categories,
     extract_receipt,
+    extract_receipt_folder,
+    list_receipt_files,
     parse_receipt_text,
     render_pdf_page_ppm,
 )
@@ -190,6 +192,32 @@ class TestExtractReceipt(unittest.TestCase):
             self.assertEqual(result["items"], [])
             self.assertEqual(result["raw_text"], "")
             self.assertIn("Tesseract", result["notes"])
+
+    def test_folder_lists_receipts_and_skips_other_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            write_text_pdf(folder / "a.pdf", [["REWE", "Milk 1,00", "SUMME EUR 1,00"]])
+            (folder / "shot.PNG").write_bytes(PNG_1X1)
+            (folder / "ignore.csv").write_text("x", encoding="utf-8")
+            names = [path.name for path in list_receipt_files(folder)]
+            self.assertEqual(names, ["a.pdf", "shot.PNG"])
+
+    def test_folder_extract_keeps_per_file_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            write_text_pdf(folder / "rewe.pdf", [["REWE", "Milk 1,00", "SUMME EUR 1,00"]])
+            (folder / "photo.png").write_bytes(PNG_1X1)
+            with mock.patch("receipt_extractor.find_tesseract", return_value=None):
+                rows = extract_receipt_folder(folder)
+            by_file = {row["file"]: row for row in rows}
+            self.assertEqual(by_file["rewe.pdf"]["status"], "Extracted")
+            self.assertEqual(by_file["rewe.pdf"]["merchant"], "REWE")
+            self.assertEqual(by_file["rewe.pdf"]["total"], 1.0)
+            self.assertGreaterEqual(by_file["rewe.pdf"]["item_count"], 1)
+            self.assertIsNotNone(by_file["rewe.pdf"]["result"])
+            self.assertEqual(by_file["photo.png"]["status"], "Extracted")
+            self.assertEqual(by_file["photo.png"]["item_count"], 0)
+            self.assertIn("Tesseract", by_file["photo.png"]["result"]["notes"])
 
     def test_unsupported_type_raises(self):
         with tempfile.TemporaryDirectory() as directory:

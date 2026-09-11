@@ -111,8 +111,46 @@ class TestTransactionListSumFooter(unittest.TestCase):
             titles = [window.tabs.tabText(index) for index in range(window.tabs.count())]
             self.assertEqual(titles[0], "Transactions")
             self.assertEqual(titles[1], "Receipts")
-            self.assertIsNotNone(window.findChild(type(window.receipt_extract_button), "receipt_extract_button"))
-            self.assertFalse(window.receipt_extract_button.isEnabled())
+            self.assertEqual(window.receipt_choose_button.text(), "Choose folder…")
+            self.assertEqual(window.receipt_table.model().columnCount(), 7)
+        finally:
+            window.close()
+
+    def test_receipt_import_table_lists_files_with_details_button(self):
+        from PySide6.QtWidgets import QPushButton
+
+        from desktop_app import ExpenseWindow
+
+        window = ExpenseWindow()
+        try:
+            window.set_receipt_imports([
+                {
+                    "file": "spar.pdf",
+                    "merchant": "SPAR - SUPERMARKT",
+                    "date": "2026-08-03",
+                    "total": 10.85,
+                    "item_count": 8,
+                    "status": "Extracted",
+                    "error": "",
+                    "result": {"merchant": "SPAR - SUPERMARKT", "items": [], "raw_text": "SPAR"},
+                },
+                {
+                    "file": "bad.png",
+                    "merchant": None,
+                    "date": None,
+                    "total": None,
+                    "item_count": 0,
+                    "status": "Failed",
+                    "error": "Could not read file",
+                    "result": None,
+                },
+            ])
+            self.assertEqual(window.receipt_table.model().rowCount(), 2)
+            self.assertEqual(window.receipt_table.model().data(window.receipt_table.model().index(0, 0)), "spar.pdf")
+            self.assertEqual(window.receipt_table.model().data(window.receipt_table.model().index(0, 3)), "10.85 €")
+            button = window.receipt_table.indexWidget(window.receipt_import_model.index(0, 6))
+            self.assertIsInstance(button, QPushButton)
+            self.assertEqual(button.text(), "See extracted data")
         finally:
             window.close()
 

@@ -8,7 +8,7 @@ A local, browser-free desktop app for importing, categorizing, and reviewing ban
 - Transaction table with sorting, pagination, and category, month, and live text filters
 - Import, create, delete, and restore rules from backups
 - Sum categories and export them as an Excel file
-- Receipts tab: pick a local PDF or image, extract merchant / line items on the machine (no API), and inspect the result in a popup. Nothing is saved yet. Digital PDFs with a text layer work as-is; photos and scanned PDFs need Tesseract for OCR.
+- Receipts tab: choose a folder of PDFs or images, extract them locally (no API), and inspect each file from the import list. Nothing is saved to Transactions yet. Digital PDFs with a text layer work as-is; photos and scanned PDFs need Tesseract for OCR.
 
 ## Windows 10/11
 

@@ -1,1 +1,0 @@
-When I use the keyword 'gitpush', generate a single terminal command that performs: git add ., a git commit with a concise, conventional commit message based on my changes, and a git push.

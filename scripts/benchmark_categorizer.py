@@ -1,7 +1,12 @@
-import time
-import os
-import tempfile
 import json
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from categorizer import Categorizer
 
 def create_dummy_rules(num_rules):

@@ -73,6 +73,20 @@ Photos and scanned PDFs need the `tesseract` binary on `PATH` (languages `deu` a
 
 If the host should not or cannot install Tesseract itself (immutable distros, no `pacman`/`apt`), set it up with Distrobox: [install-tesseract-linux-distrobox.md](install-tesseract-linux-distrobox.md).
 
+## Tests
+
+Unit tests live in [`tests/`](tests/). From the project root, with the virtualenv active:
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+On Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -t .
+```
+
 ## Build a Windows EXE
 
 After installing dependencies:
